@@ -16,12 +16,14 @@
   --color-canvas: var(--bg-canvas);
   --color-surface: var(--bg-surface);
   --color-border: var(--border-default);
-
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
-
   --color-accent-stellar: var(--accent-stellar);
   --color-accent-forge: var(--accent-forge);
+
+  --font-display: "Space Grotesk", sans-serif;
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
 
   --radius-default: 6px;
 }
