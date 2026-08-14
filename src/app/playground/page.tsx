@@ -3,36 +3,20 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { stellarComponents } from "@/data/components";
 
-type ComponentValue = "token" | "payment" | "access-control";
+type ComponentSlug =
+  | "token"
+  | "payment"
+  | "access-control"
+  | "escrow"
+  | "subscription"
+  | "multi-signature";
 
-interface PlaygroundComponent {
-  value: ComponentValue;
-  label: string;
-  description: string;
-  category: string;
-  defaults: {
-    name: string;
-    symbol: string;
-    decimals: string;
-    network: "testnet" | "futurenet";
-  };
-  code: string;
-}
+type Network = "testnet" | "futurenet";
 
-const components: PlaygroundComponent[] = [
-  {
-    value: "token",
-    label: "Token",
-    description: "Fungible token pattern",
-    category: "Tokens",
-    defaults: {
-      name: "Forge Token",
-      symbol: "FORGE",
-      decimals: "7",
-      network: "testnet",
-    },
-    code: `#[contract]
+const generatedPatterns: Record<ComponentSlug, string> = {
+  token: `#[contract]
 pub struct TokenComponent;
 
 #[contractimpl]
@@ -45,19 +29,8 @@ impl TokenComponent {
         // implementation
     }
 }`,
-  },
-  {
-    value: "payment",
-    label: "Payment",
-    description: "Stellar payment pattern",
-    category: "Payments",
-    defaults: {
-      name: "Payment",
-      symbol: "XLM",
-      decimals: "7",
-      network: "testnet",
-    },
-    code: `#[contract]
+
+  payment: `#[contract]
 pub struct PaymentComponent;
 
 #[contractimpl]
@@ -70,19 +43,8 @@ impl PaymentComponent {
         // implementation
     }
 }`,
-  },
-  {
-    value: "access-control",
-    label: "Access Control",
-    description: "Role and permission checks",
-    category: "Security",
-    defaults: {
-      name: "Admin",
-      symbol: "ADMIN",
-      decimals: "0",
-      network: "testnet",
-    },
-    code: `#[contract]
+
+  "access-control": `#[contract]
 pub struct AccessControlComponent;
 
 #[contractimpl]
@@ -94,76 +56,220 @@ impl AccessControlComponent {
         // permission check
     }
 }`,
+
+  escrow: `#[contract]
+pub struct EscrowComponent;
+
+#[contractimpl]
+impl EscrowComponent {
+    pub fn deposit(
+        env: Env,
+        depositor: Address,
+        amount: i128,
+    ) {
+        // escrow deposit
+    }
+
+    pub fn release(
+        env: Env,
+        recipient: Address,
+    ) {
+        // conditional release
+    }
+}`,
+
+  subscription: `#[contract]
+pub struct SubscriptionComponent;
+
+#[contractimpl]
+impl SubscriptionComponent {
+    pub fn subscribe(
+        env: Env,
+        subscriber: Address,
+    ) {
+        // create subscription
+    }
+
+    pub fn charge(
+        env: Env,
+        subscriber: Address,
+        amount: i128,
+    ) {
+        // recurring payment
+    }
+}`,
+
+  "multi-signature": `#[contract]
+pub struct MultiSignatureComponent;
+
+#[contractimpl]
+impl MultiSignatureComponent {
+    pub fn approve(
+        env: Env,
+        signer: Address,
+    ) {
+        // record approval
+    }
+
+    pub fn execute(
+        env: Env,
+    ) {
+        // execute after required approvals
+    }
+}`,
+};
+
+const defaultValues: Record<
+  ComponentSlug,
+  {
+    name: string;
+    symbol: string;
+    decimals: string;
+    network: Network;
+  }
+> = {
+  token: {
+    name: "Forge Token",
+    symbol: "FORGE",
+    decimals: "7",
+    network: "testnet",
   },
-];
+
+  payment: {
+    name: "Payment",
+    symbol: "XLM",
+    decimals: "7",
+    network: "testnet",
+  },
+
+  "access-control": {
+    name: "Admin",
+    symbol: "ADMIN",
+    decimals: "0",
+    network: "testnet",
+  },
+
+  escrow: {
+    name: "Escrow",
+    symbol: "XLM",
+    decimals: "7",
+    network: "testnet",
+  },
+
+  subscription: {
+    name: "Subscription",
+    symbol: "XLM",
+    decimals: "7",
+    network: "testnet",
+  },
+
+  "multi-signature": {
+    name: "Multi-Signature",
+    symbol: "XLM",
+    decimals: "7",
+    network: "testnet",
+  },
+};
 
 export default function PlaygroundPage() {
-  const [selectedValue, setSelectedValue] =
-    useState<ComponentValue>("token");
+  const [selectedSlug, setSelectedSlug] =
+    useState<ComponentSlug>("token");
 
-  const [tokenName, setTokenName] = useState("Forge Token");
-  const [symbol, setSymbol] = useState("FORGE");
-  const [decimals, setDecimals] = useState("7");
-  const [network, setNetwork] =
-    useState<"testnet" | "futurenet">("testnet");
+  const [name, setName] = useState(defaultValues.token.name);
+  const [symbol, setSymbol] = useState(defaultValues.token.symbol);
+  const [decimals, setDecimals] = useState(defaultValues.token.decimals);
+  const [network, setNetwork] = useState<Network>(
+    defaultValues.token.network,
+  );
 
   const [generatedCode, setGeneratedCode] = useState(
-    components[0].code,
+    generatedPatterns.token,
   );
 
   const selectedComponent =
-    components.find((component) => component.value === selectedValue) ??
-    components[0];
+    stellarComponents.find(
+      (component) => component.slug === selectedSlug,
+    ) ?? stellarComponents[0];
 
-  function selectComponent(value: ComponentValue) {
-    const component =
-      components.find((item) => item.value === value) ?? components[0];
+  function selectComponent(slug: ComponentSlug) {
+    const defaults = defaultValues[slug];
 
-    setSelectedValue(component.value);
-    setTokenName(component.defaults.name);
-    setSymbol(component.defaults.symbol);
-    setDecimals(component.defaults.decimals);
-    setNetwork(component.defaults.network);
-    setGeneratedCode(component.code);
+    setSelectedSlug(slug);
+    setName(defaults.name);
+    setSymbol(defaults.symbol);
+    setDecimals(defaults.decimals);
+    setNetwork(defaults.network);
+    setGeneratedCode(generatedPatterns[slug]);
   }
 
   function generatePattern() {
-    let code = selectedComponent.code;
+    let code = generatedPatterns[selectedSlug];
 
-    if (selectedValue === "token") {
-      code = `// ${tokenName} (${symbol})
+    if (selectedSlug === "token") {
+      code = `// ${name} (${symbol})
 // Decimals: ${decimals}
 // Network: ${network}
 
-${selectedComponent.code}`;
+${generatedPatterns.token}`;
     }
 
-    if (selectedValue === "payment") {
+    if (selectedSlug === "payment") {
       code = `// Payment pattern
 // Asset: ${symbol}
 // Network: ${network}
 
-${selectedComponent.code}`;
+${generatedPatterns.payment}`;
     }
 
-    if (selectedValue === "access-control") {
+    if (selectedSlug === "access-control") {
       code = `// Access control pattern
-// Role: ${tokenName}
+// Role: ${name}
 // Network: ${network}
 
-${selectedComponent.code}`;
+${generatedPatterns["access-control"]}`;
+    }
+
+    if (selectedSlug === "escrow") {
+      code = `// Escrow pattern
+// Asset: ${symbol}
+// Network: ${network}
+
+${generatedPatterns.escrow}`;
+    }
+
+    if (selectedSlug === "subscription") {
+      code = `// Subscription pattern
+// Plan: ${name}
+// Asset: ${symbol}
+// Network: ${network}
+
+${generatedPatterns.subscription}`;
+    }
+
+    if (selectedSlug === "multi-signature") {
+      code = `// Multi-signature pattern
+// Configuration: ${name}
+// Required signers: ${symbol}
+// Network: ${network}
+
+${generatedPatterns["multi-signature"]}`;
     }
 
     setGeneratedCode(code);
   }
 
   function resetConfiguration() {
-    setTokenName(selectedComponent.defaults.name);
-    setSymbol(selectedComponent.defaults.symbol);
-    setDecimals(selectedComponent.defaults.decimals);
-    setNetwork(selectedComponent.defaults.network);
-    setGeneratedCode(selectedComponent.code);
+    const defaults = defaultValues[selectedSlug];
+
+    setName(defaults.name);
+    setSymbol(defaults.symbol);
+    setDecimals(defaults.decimals);
+    setNetwork(defaults.network);
+    setGeneratedCode(generatedPatterns[selectedSlug]);
   }
+
+  const isAccessControl = selectedSlug === "access-control";
+  const isMultiSignature = selectedSlug === "multi-signature";
 
   return (
     <main className="flex-1">
@@ -191,23 +297,25 @@ ${selectedComponent.code}`;
               </p>
 
               <div className="mt-4 space-y-2">
-                {components.map((component) => (
+                {stellarComponents.map((component) => (
                   <button
-                    key={component.value}
+                    key={component.slug}
                     type="button"
-                    onClick={() => selectComponent(component.value)}
+                    onClick={() =>
+                      selectComponent(component.slug as ComponentSlug)
+                    }
                     className={`w-full rounded-default border px-3 py-3 text-left transition-colors duration-150 ${
-                      selectedValue === component.value
+                      selectedSlug === component.slug
                         ? "border-accent-stellar"
                         : "border-border hover:border-accent-stellar/60"
                     }`}
                   >
                     <p className="font-display text-sm font-medium text-text-primary">
-                      {component.label}
+                      {component.name}
                     </p>
 
                     <p className="mt-1 font-sans text-xs text-text-secondary">
-                      {component.description}
+                      {component.shortDescription}
                     </p>
                   </button>
                 ))}
@@ -224,7 +332,7 @@ ${selectedComponent.code}`;
                   </p>
 
                   <h2 className="mt-2 font-display text-2xl font-medium text-text-primary">
-                    {selectedComponent.label}
+                    {selectedComponent.name}
                   </h2>
 
                   <p className="mt-2 max-w-xl font-sans text-sm leading-relaxed text-text-secondary">
@@ -233,7 +341,7 @@ ${selectedComponent.code}`;
                 </div>
 
                 <span className="rounded-default border border-border px-2 py-1 font-mono text-xs text-text-secondary">
-                  Concept
+                  {selectedComponent.status}
                 </span>
               </div>
             </Card>
@@ -246,22 +354,30 @@ ${selectedComponent.code}`;
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <label className="block">
                   <span className="font-sans text-sm text-text-primary">
-                    {selectedValue === "access-control"
+                    {isAccessControl
                       ? "Role name"
-                      : "Token name"}
+                      : isMultiSignature
+                        ? "Configuration name"
+                        : selectedSlug === "subscription"
+                          ? "Plan name"
+                          : selectedSlug === "escrow"
+                            ? "Escrow name"
+                            : selectedSlug === "payment"
+                              ? "Payment name"
+                              : "Token name"}
                   </span>
 
                   <input
                     type="text"
-                    value={tokenName}
-                    onChange={(event) => setTokenName(event.target.value)}
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
                     className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-sans text-sm text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
                   />
                 </label>
 
                 <label className="block">
                   <span className="font-sans text-sm text-text-primary">
-                    Symbol / Asset
+                    {isMultiSignature ? "Required signers" : "Symbol / Asset"}
                   </span>
 
                   <input
@@ -283,7 +399,7 @@ ${selectedComponent.code}`;
                     onChange={(event) => setDecimals(event.target.value)}
                     min="0"
                     max="18"
-                    disabled={selectedValue === "access-control"}
+                    disabled={isAccessControl || isMultiSignature}
                     className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
                   />
                 </label>
@@ -296,9 +412,7 @@ ${selectedComponent.code}`;
                   <select
                     value={network}
                     onChange={(event) =>
-                      setNetwork(
-                        event.target.value as "testnet" | "futurenet",
-                      )
+                      setNetwork(event.target.value as Network)
                     }
                     className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-sans text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
                   >
