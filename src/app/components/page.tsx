@@ -1,58 +1,8 @@
 import { ComponentCard } from "@/components/catalog/ComponentCard";
-
-interface CatalogEntry {
-  slug: string;
-  name: string;
-  description: string;
-  category: string;
-}
-
-const components: CatalogEntry[] = [
-  {
-    slug: "token",
-    name: "Token",
-    description:
-      "A fungible token pattern for issuing and transferring balances on Soroban.",
-    category: "Tokens",
-  },
-  {
-    slug: "payment",
-    name: "Payment",
-    description:
-      "A minimal pattern for building and submitting a Stellar payment.",
-    category: "Payments",
-  },
-  {
-    slug: "access-control",
-    name: "Access Control",
-    description:
-      "Role- and permission-based access checks for a Soroban contract.",
-    category: "Security",
-  },
-  {
-    slug: "escrow",
-    name: "Escrow",
-    description:
-      "Holds funds until a defined condition or set of signers releases them.",
-    category: "Payments",
-  },
-  {
-    slug: "subscription",
-    name: "Subscription",
-    description:
-      "A recurring-payment pattern for periodic, agreed-upon transfers.",
-    category: "Payments",
-  },
-  {
-    slug: "multi-signature",
-    name: "Multi-signature",
-    description:
-      "Requires multiple approving signers before a transaction executes.",
-    category: "Security",
-  },
-];
-
-const categories = ["All", "Tokens", "Payments", "Security"];
+import {
+  componentCategories,
+  stellarComponents,
+} from "@/data/components";
 
 export default function ComponentsPage() {
   return (
@@ -82,7 +32,7 @@ export default function ComponentsPage() {
           />
 
           <div className="flex flex-wrap gap-2">
-            {categories.map((category) => (
+            {componentCategories.map((category) => (
               <span
                 key={category}
                 className={`rounded-default border px-3 py-1 font-mono text-xs ${
@@ -98,12 +48,13 @@ export default function ComponentsPage() {
         </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {components.map((component) => (
+          {stellarComponents.map((component) => (
             <ComponentCard
               key={component.slug}
               name={component.name}
               description={component.description}
               category={component.category}
+              status={component.status}
               href={`/components/${component.slug}`}
             />
           ))}
