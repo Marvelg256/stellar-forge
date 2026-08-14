@@ -4,47 +4,35 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
-const components = [
+type ComponentValue = "token" | "payment" | "access-control";
+
+interface PlaygroundComponent {
+  value: ComponentValue;
+  label: string;
+  description: string;
+  category: string;
+  defaults: {
+    name: string;
+    symbol: string;
+    decimals: string;
+    network: "testnet" | "futurenet";
+  };
+  code: string;
+}
+
+const components: PlaygroundComponent[] = [
   {
     value: "token",
     label: "Token",
     description: "Fungible token pattern",
-  },
-  {
-    value: "payment",
-    label: "Payment",
-    description: "Stellar payment pattern",
-  },
-  {
-    value: "access-control",
-    label: "Access Control",
-    description: "Role and permission checks",
-  },
-];
-
-const componentDetails = {
-  token: {
-    title: "Token",
-    description:
-      "Configure the basic parameters for a fungible token component.",
-    status: "Concept",
-  },
-  payment: {
-    title: "Payment",
-    description:
-      "Configure the basic parameters for a Stellar payment component.",
-    status: "Concept",
-  },
-  "access-control": {
-    title: "Access Control",
-    description:
-      "Configure the basic parameters for role and permission checks.",
-    status: "Concept",
-  },
-};
-
-const codeTemplates = {
-  token: `#[contract]
+    category: "Tokens",
+    defaults: {
+      name: "Forge Token",
+      symbol: "FORGE",
+      decimals: "7",
+      network: "testnet",
+    },
+    code: `#[contract]
 pub struct TokenComponent;
 
 #[contractimpl]
@@ -57,12 +45,24 @@ impl TokenComponent {
         // implementation
     }
 }`,
-  payment: `#[contract]
+  },
+  {
+    value: "payment",
+    label: "Payment",
+    description: "Stellar payment pattern",
+    category: "Payments",
+    defaults: {
+      name: "Payment",
+      symbol: "XLM",
+      decimals: "7",
+      network: "testnet",
+    },
+    code: `#[contract]
 pub struct PaymentComponent;
 
 #[contractimpl]
 impl PaymentComponent {
-    pub fn send(
+    pub fn pay(
         env: Env,
         to: Address,
         amount: i128,
@@ -70,73 +70,99 @@ impl PaymentComponent {
         // implementation
     }
 }`,
-  "access-control": `#[contract]
+  },
+  {
+    value: "access-control",
+    label: "Access Control",
+    description: "Role and permission checks",
+    category: "Security",
+    defaults: {
+      name: "Admin",
+      symbol: "ADMIN",
+      decimals: "0",
+      network: "testnet",
+    },
+    code: `#[contract]
 pub struct AccessControlComponent;
 
 #[contractimpl]
 impl AccessControlComponent {
-    pub fn require_role(
+    pub fn authorize(
         env: Env,
-        address: Address,
-        role: Symbol,
+        account: Address,
     ) {
-        // implementation
+        // permission check
     }
 }`,
-};
-
-type ComponentValue = keyof typeof componentDetails;
-
-const defaultConfig = {
-  name: "Forge Token",
-  symbol: "FORGE",
-  decimals: "7",
-  network: "testnet",
-};
+  },
+];
 
 export default function PlaygroundPage() {
-  const [selectedComponent, setSelectedComponent] =
+  const [selectedValue, setSelectedValue] =
     useState<ComponentValue>("token");
 
-  const [name, setName] = useState(defaultConfig.name);
-  const [symbol, setSymbol] = useState(defaultConfig.symbol);
-  const [decimals, setDecimals] = useState(defaultConfig.decimals);
-  const [network, setNetwork] = useState(defaultConfig.network);
-  const [generated, setGenerated] = useState(false);
+  const [tokenName, setTokenName] = useState("Forge Token");
+  const [symbol, setSymbol] = useState("FORGE");
+  const [decimals, setDecimals] = useState("7");
+  const [network, setNetwork] =
+    useState<"testnet" | "futurenet">("testnet");
 
-  const details = componentDetails[selectedComponent];
-  const code = codeTemplates[selectedComponent];
+  const [generatedCode, setGeneratedCode] = useState(
+    components[0].code,
+  );
 
-  function handleComponentChange(value: ComponentValue) {
-    setSelectedComponent(value);
-    setGenerated(false);
+  const selectedComponent =
+    components.find((component) => component.value === selectedValue) ??
+    components[0];
 
-    if (value === "token") {
-      setName("Forge Token");
-      setSymbol("FORGE");
-      setDecimals("7");
-    } else if (value === "payment") {
-      setName("Forge Payment");
-      setSymbol("PAY");
-      setDecimals("7");
-    } else {
-      setName("Forge Access");
-      setSymbol("ROLE");
-      setDecimals("0");
+  function selectComponent(value: ComponentValue) {
+    const component =
+      components.find((item) => item.value === value) ?? components[0];
+
+    setSelectedValue(component.value);
+    setTokenName(component.defaults.name);
+    setSymbol(component.defaults.symbol);
+    setDecimals(component.defaults.decimals);
+    setNetwork(component.defaults.network);
+    setGeneratedCode(component.code);
+  }
+
+  function generatePattern() {
+    let code = selectedComponent.code;
+
+    if (selectedValue === "token") {
+      code = `// ${tokenName} (${symbol})
+// Decimals: ${decimals}
+// Network: ${network}
+
+${selectedComponent.code}`;
     }
+
+    if (selectedValue === "payment") {
+      code = `// Payment pattern
+// Asset: ${symbol}
+// Network: ${network}
+
+${selectedComponent.code}`;
+    }
+
+    if (selectedValue === "access-control") {
+      code = `// Access control pattern
+// Role: ${tokenName}
+// Network: ${network}
+
+${selectedComponent.code}`;
+    }
+
+    setGeneratedCode(code);
   }
 
-  function handleGenerate() {
-    setGenerated(true);
-  }
-
-  function handleReset() {
-    setSelectedComponent("token");
-    setName(defaultConfig.name);
-    setSymbol(defaultConfig.symbol);
-    setDecimals(defaultConfig.decimals);
-    setNetwork(defaultConfig.network);
-    setGenerated(false);
+  function resetConfiguration() {
+    setTokenName(selectedComponent.defaults.name);
+    setSymbol(selectedComponent.defaults.symbol);
+    setDecimals(selectedComponent.defaults.decimals);
+    setNetwork(selectedComponent.defaults.network);
+    setGeneratedCode(selectedComponent.code);
   }
 
   return (
@@ -165,35 +191,26 @@ export default function PlaygroundPage() {
               </p>
 
               <div className="mt-4 space-y-2">
-                {components.map((component) => {
-                  const isSelected =
-                    selectedComponent === component.value;
+                {components.map((component) => (
+                  <button
+                    key={component.value}
+                    type="button"
+                    onClick={() => selectComponent(component.value)}
+                    className={`w-full rounded-default border px-3 py-3 text-left transition-colors duration-150 ${
+                      selectedValue === component.value
+                        ? "border-accent-stellar"
+                        : "border-border hover:border-accent-stellar/60"
+                    }`}
+                  >
+                    <p className="font-display text-sm font-medium text-text-primary">
+                      {component.label}
+                    </p>
 
-                  return (
-                    <button
-                      key={component.value}
-                      type="button"
-                      onClick={() =>
-                        handleComponentChange(
-                          component.value as ComponentValue,
-                        )
-                      }
-                      className={`w-full rounded-default border px-3 py-3 text-left transition-colors duration-150 ease-out ${
-                        isSelected
-                          ? "border-accent-stellar"
-                          : "border-border hover:border-accent-stellar/60"
-                      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar motion-reduce:transition-none`}
-                    >
-                      <p className="font-display text-sm font-medium text-text-primary">
-                        {component.label}
-                      </p>
-
-                      <p className="mt-1 font-sans text-xs text-text-secondary">
-                        {component.description}
-                      </p>
-                    </button>
-                  );
-                })}
+                    <p className="mt-1 font-sans text-xs text-text-secondary">
+                      {component.description}
+                    </p>
+                  </button>
+                ))}
               </div>
             </div>
           </Card>
@@ -207,16 +224,16 @@ export default function PlaygroundPage() {
                   </p>
 
                   <h2 className="mt-2 font-display text-2xl font-medium text-text-primary">
-                    {details.title}
+                    {selectedComponent.label}
                   </h2>
 
                   <p className="mt-2 max-w-xl font-sans text-sm leading-relaxed text-text-secondary">
-                    {details.description}
+                    {selectedComponent.description}
                   </p>
                 </div>
 
                 <span className="rounded-default border border-border px-2 py-1 font-mono text-xs text-text-secondary">
-                  {details.status}
+                  Concept
                 </span>
               </div>
             </Card>
@@ -229,32 +246,28 @@ export default function PlaygroundPage() {
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <label className="block">
                   <span className="font-sans text-sm text-text-primary">
-                    Component name
+                    {selectedValue === "access-control"
+                      ? "Role name"
+                      : "Token name"}
                   </span>
 
                   <input
                     type="text"
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.target.value);
-                      setGenerated(false);
-                    }}
+                    value={tokenName}
+                    onChange={(event) => setTokenName(event.target.value)}
                     className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-sans text-sm text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
                   />
                 </label>
 
                 <label className="block">
                   <span className="font-sans text-sm text-text-primary">
-                    Symbol
+                    Symbol / Asset
                   </span>
 
                   <input
                     type="text"
                     value={symbol}
-                    onChange={(event) => {
-                      setSymbol(event.target.value);
-                      setGenerated(false);
-                    }}
+                    onChange={(event) => setSymbol(event.target.value)}
                     className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
                   />
                 </label>
@@ -267,13 +280,11 @@ export default function PlaygroundPage() {
                   <input
                     type="number"
                     value={decimals}
-                    onChange={(event) => {
-                      setDecimals(event.target.value);
-                      setGenerated(false);
-                    }}
+                    onChange={(event) => setDecimals(event.target.value)}
                     min="0"
                     max="18"
-                    className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
+                    disabled={selectedValue === "access-control"}
+                    className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
                   />
                 </label>
 
@@ -284,10 +295,11 @@ export default function PlaygroundPage() {
 
                   <select
                     value={network}
-                    onChange={(event) => {
-                      setNetwork(event.target.value);
-                      setGenerated(false);
-                    }}
+                    onChange={(event) =>
+                      setNetwork(
+                        event.target.value as "testnet" | "futurenet",
+                      )
+                    }
                     className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-sans text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
                   >
                     <option value="testnet">Stellar Testnet</option>
@@ -297,17 +309,11 @@ export default function PlaygroundPage() {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
-                <Button
-                  variant="primary"
-                  onClick={handleGenerate}
-                >
+                <Button variant="primary" onClick={generatePattern}>
                   Generate Pattern
                 </Button>
 
-                <Button
-                  variant="secondary"
-                  onClick={handleReset}
-                >
+                <Button variant="secondary" onClick={resetConfiguration}>
                   Reset
                 </Button>
               </div>
@@ -319,39 +325,11 @@ export default function PlaygroundPage() {
                   Generated structure
                 </span>
 
-                <span
-                  className={
-                    generated
-                      ? "text-accent-forge"
-                      : "text-text-secondary"
-                  }
-                >
-                  {generated ? "Generated" : "Ready"}
-                </span>
+                <span className="text-accent-forge">Ready</span>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-text-secondary">
-                <span>
-                  Name: <span className="text-text-primary">{name}</span>
-                </span>
-
-                <span>
-                  Symbol:{" "}
-                  <span className="text-text-primary">{symbol}</span>
-                </span>
-
-                <span>
-                  Network:{" "}
-                  <span className="text-text-primary">
-                    {network === "testnet"
-                      ? "Testnet"
-                      : "Futurenet"}
-                  </span>
-                </span>
-              </div>
-
-              <pre className="mt-5 overflow-x-auto leading-relaxed text-text-secondary">
-                <code>{code}</code>
+              <pre className="mt-4 overflow-x-auto leading-relaxed text-text-secondary">
+                <code>{generatedCode}</code>
               </pre>
             </Card>
           </div>
