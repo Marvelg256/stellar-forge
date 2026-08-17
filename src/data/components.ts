@@ -1,4 +1,4 @@
-export type ComponentStatus = "Concept";
+export type ComponentStatus = "Concept" | "Implemented";
 
 export interface StellarComponent {
   slug: string;
@@ -16,16 +16,18 @@ export const stellarComponents: StellarComponent[] = [
     slug: "token",
     name: "Token",
     description:
-      "A fungible token pattern for issuing and transferring balances on Soroban.",
+      "A standard fungible token contract implementing the SEP-41 Soroban token interface — initialize, mint, transfer, and query balances.",
     category: "Tokens",
-    status: "Concept",
-    shortDescription: "Fungible token pattern",
+    status: "Implemented",
+    shortDescription: "SEP-41 fungible token contract",
     overview:
-      "A reusable pattern for representing, issuing, and transferring fungible assets in a Soroban-based application.",
+      "A standard Soroban fungible token contract implementing the SEP-41 token interface (soroban_sdk::token::TokenInterface). The contract is deployed with an admin, name, symbol, and decimals, and supports admin-controlled minting, authorized transfers, allowances, and burning. Source lives in the contracts workspace and ships with a passing Rust test suite.",
     useCases: [
-      "Create a reusable token structure",
-      "Transfer balances between addresses",
-      "Understand the basic Soroban token pattern",
+      "Deploy a token with configurable admin, name, symbol, and decimals",
+      "Mint supply as the contract admin",
+      "Transfer balances between addresses with authorization",
+      "Grant and spend allowances for delegated transfers",
+      "Burn tokens held by an address",
     ],
   },
 

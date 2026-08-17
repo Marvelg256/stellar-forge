@@ -33,7 +33,7 @@ export default function ComponentsPage() {
     <main className="flex-1">
       <section className="mx-auto max-w-6xl px-6 py-16">
         <p className="mb-4 font-mono text-xs tracking-wide text-accent-stellar">
-          COMPONENT CATALOG — CONCEPTS, NOT YET IMPLEMENTED
+          COMPONENT CATALOG
         </p>
 
         <h1 className="font-display text-3xl font-medium text-text-primary sm:text-4xl">
@@ -42,9 +42,10 @@ export default function ComponentsPage() {
 
         <p className="mt-4 max-w-2xl font-sans text-base leading-relaxed text-text-secondary">
           Each entry below outlines a common Soroban pattern — what it does
-          and why you&apos;d reach for it. These are catalog descriptions, not
-          finished contract implementations yet; code, docs, and a playground
-          for each one are coming in later steps.
+          and why you&apos;d reach for it. Components marked Implemented ship
+          with a real, tested Soroban contract in the contracts workspace;
+          the rest are catalog descriptions with code, docs, and playground
+          support coming in later steps.
         </p>
 
         <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

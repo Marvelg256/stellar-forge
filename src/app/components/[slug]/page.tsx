@@ -84,8 +84,9 @@ export default async function ComponentDetailPage({
               </p>
 
               <p className="mt-2 font-sans text-sm leading-relaxed text-text-secondary">
-                This component is currently represented as a reusable pattern
-                in the Stellar-Forge catalog.
+                {component.status === "Implemented"
+                  ? "This component has a real, tested Soroban contract in the Stellar-Forge contracts workspace."
+                  : "This component is currently represented as a reusable pattern in the Stellar-Forge catalog."}
               </p>
             </div>
           </Card>
