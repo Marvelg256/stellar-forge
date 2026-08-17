@@ -113,6 +113,91 @@ export default async function ComponentDetailPage({
           </Card>
         </section>
 
+        {component.interface && component.implementation && (
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
+            <Card>
+              <p className="font-mono text-xs uppercase tracking-wide text-accent-stellar">
+                Public interface
+              </p>
+
+              <div className="mt-5 space-y-4">
+                {component.interface.map((fn) => {
+                  const params = fn.params
+                    .map((param) => `${param.name}: ${param.type}`)
+                    .join(", ");
+
+                  return (
+                    <div
+                      key={fn.name}
+                      className="rounded-default border border-border p-4"
+                    >
+                      <p className="font-mono text-xs text-text-primary">
+                        <span className="text-accent-stellar">
+                          {fn.name}
+                        </span>
+                        {"("}
+                        {params}
+                        {")"}
+                        {fn.returns ? ` -> ${fn.returns}` : ""}
+                      </p>
+
+                      {fn.description && (
+                        <p className="mt-2 font-sans text-sm leading-relaxed text-text-secondary">
+                          {fn.description}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card>
+              <p className="font-mono text-xs uppercase tracking-wide text-text-secondary">
+                Implementation
+              </p>
+
+              <dl className="mt-4 space-y-4">
+                <div>
+                  <dt className="font-sans text-sm text-text-primary">
+                    Language
+                  </dt>
+                  <dd className="mt-1 font-mono text-xs text-text-secondary">
+                    {component.implementation.language}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="font-sans text-sm text-text-primary">
+                    Package
+                  </dt>
+                  <dd className="mt-1 font-mono text-xs text-text-secondary">
+                    {component.implementation.package}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="font-sans text-sm text-text-primary">
+                    Source
+                  </dt>
+                  <dd className="mt-1 font-mono text-xs text-text-secondary">
+                    {component.implementation.sourcePath}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="font-sans text-sm text-text-primary">
+                    Build target
+                  </dt>
+                  <dd className="mt-1 font-mono text-xs text-text-secondary">
+                    {component.implementation.buildTarget}
+                  </dd>
+                </div>
+              </dl>
+            </Card>
+          </div>
+        )}
+
         <section className="mt-6">
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-4">

@@ -1,5 +1,43 @@
 export type ComponentStatus = "Concept" | "Implemented";
 
+export type ConfigFieldType = "text" | "number" | "select";
+
+export interface ParameterSpec {
+  name: string;
+  type: string;
+}
+
+export interface FunctionSpec {
+  name: string;
+  params: ParameterSpec[];
+  returns?: string;
+  description?: string;
+}
+
+export interface ConfigOption {
+  label: string;
+  value: string;
+}
+
+export interface ConfigField {
+  key: string;
+  label: string;
+  type: ConfigFieldType;
+  default: string;
+  min?: number;
+  max?: number;
+  options?: ConfigOption[];
+  disabled?: boolean;
+  mono?: boolean;
+}
+
+export interface ComponentImplementation {
+  language: "rust";
+  package: string;
+  sourcePath: string;
+  buildTarget: string;
+}
+
 export interface StellarComponent {
   slug: string;
   name: string;
@@ -9,6 +47,47 @@ export interface StellarComponent {
   shortDescription: string;
   overview: string;
   useCases: string[];
+  implementation?: ComponentImplementation;
+  interface?: FunctionSpec[];
+  config?: ConfigField[];
+}
+
+const networkConfig: ConfigField = {
+  key: "network",
+  label: "Network",
+  type: "select",
+  default: "testnet",
+  options: [
+    { label: "Stellar Testnet", value: "testnet" },
+    { label: "Stellar Futurenet", value: "futurenet" },
+  ],
+};
+
+function symbolConfig(defaultSymbol: string): ConfigField {
+  return {
+    key: "symbol",
+    label: "Symbol / Asset",
+    type: "text",
+    default: defaultSymbol,
+    mono: true,
+  };
+}
+
+function decimalsConfig(
+  defaults: { decimals: string; disabled?: boolean } = {
+    decimals: "7",
+  },
+): ConfigField {
+  return {
+    key: "decimals",
+    label: "Decimals",
+    type: "number",
+    default: defaults.decimals,
+    min: 0,
+    max: 18,
+    disabled: defaults.disabled,
+    mono: true,
+  };
 }
 
 export const stellarComponents: StellarComponent[] = [
@@ -29,6 +108,133 @@ export const stellarComponents: StellarComponent[] = [
       "Grant and spend allowances for delegated transfers",
       "Burn tokens held by an address",
     ],
+    implementation: {
+      language: "rust",
+      package: "token",
+      sourcePath: "contracts/contracts/token",
+      buildTarget: "wasm32v1-none",
+    },
+    interface: [
+      {
+        name: "__constructor",
+        params: [
+          { name: "admin", type: "Address" },
+          { name: "decimal", type: "u32" },
+          { name: "name", type: "String" },
+          { name: "symbol", type: "String" },
+        ],
+        description:
+          "Deploys and initializes the token. Called automatically on deploy.",
+      },
+      {
+        name: "name",
+        params: [],
+        returns: "String",
+        description: "Returns the token name.",
+      },
+      {
+        name: "symbol",
+        params: [],
+        returns: "String",
+        description: "Returns the token symbol.",
+      },
+      {
+        name: "decimals",
+        params: [],
+        returns: "u32",
+        description:
+          "Returns the number of decimals used to represent token amounts.",
+      },
+      {
+        name: "balance",
+        params: [{ name: "id", type: "Address" }],
+        returns: "i128",
+        description: "Returns the balance of id, or 0 when unset.",
+      },
+      {
+        name: "transfer",
+        params: [
+          { name: "from", type: "Address" },
+          { name: "to_muxed", type: "MuxedAddress" },
+          { name: "amount", type: "i128" },
+        ],
+        description: "Transfers amount from from to to_muxed, authorized by from.",
+      },
+      {
+        name: "allowance",
+        params: [
+          { name: "from", type: "Address" },
+          { name: "spender", type: "Address" },
+        ],
+        returns: "i128",
+        description:
+          "Returns the amount spender is allowed to transfer out of from's balance.",
+      },
+      {
+        name: "approve",
+        params: [
+          { name: "from", type: "Address" },
+          { name: "spender", type: "Address" },
+          { name: "amount", type: "i128" },
+          { name: "expiration_ledger", type: "u32" },
+        ],
+        description:
+          "Sets the allowance spender may transfer from from's balance until expiration_ledger.",
+      },
+      {
+        name: "transfer_from",
+        params: [
+          { name: "spender", type: "Address" },
+          { name: "from", type: "Address" },
+          { name: "to", type: "Address" },
+          { name: "amount", type: "i128" },
+        ],
+        description:
+          "Transfers amount from from to to, consuming spender's allowance. Authorized by spender.",
+      },
+      {
+        name: "burn",
+        params: [
+          { name: "from", type: "Address" },
+          { name: "amount", type: "i128" },
+        ],
+        description: "Burns amount from from's balance. Authorized by from.",
+      },
+      {
+        name: "burn_from",
+        params: [
+          { name: "spender", type: "Address" },
+          { name: "from", type: "Address" },
+          { name: "amount", type: "i128" },
+        ],
+        description:
+          "Burns amount from from's balance, consuming spender's allowance. Authorized by spender.",
+      },
+      {
+        name: "mint",
+        params: [
+          { name: "to", type: "Address" },
+          { name: "amount", type: "i128" },
+        ],
+        description: "Mints amount to to. Admin-only.",
+      },
+      {
+        name: "set_admin",
+        params: [{ name: "new_admin", type: "Address" }],
+        description: "Sets the contract admin to new_admin. Admin-only.",
+      },
+    ],
+    config: [
+      {
+        key: "name",
+        label: "Token name",
+        type: "text",
+        default: "Forge Token",
+      },
+      symbolConfig("FORGE"),
+      decimalsConfig(),
+      networkConfig,
+    ],
   },
 
   {
@@ -45,6 +251,17 @@ export const stellarComponents: StellarComponent[] = [
       "Build a basic Stellar payment flow",
       "Understand payment transaction structure",
       "Adapt the pattern for application-specific payments",
+    ],
+    config: [
+      {
+        key: "name",
+        label: "Payment name",
+        type: "text",
+        default: "Payment",
+      },
+      symbolConfig("XLM"),
+      decimalsConfig(),
+      networkConfig,
     ],
   },
 
@@ -63,6 +280,17 @@ export const stellarComponents: StellarComponent[] = [
       "Define role-based permissions",
       "Understand authorization patterns in Soroban",
     ],
+    config: [
+      {
+        key: "name",
+        label: "Role name",
+        type: "text",
+        default: "Admin",
+      },
+      symbolConfig("ADMIN"),
+      decimalsConfig({ decimals: "0", disabled: true }),
+      networkConfig,
+    ],
   },
 
   {
@@ -79,6 +307,17 @@ export const stellarComponents: StellarComponent[] = [
       "Hold funds between multiple parties",
       "Release funds after defined conditions",
       "Explore conditional payment workflows",
+    ],
+    config: [
+      {
+        key: "name",
+        label: "Escrow name",
+        type: "text",
+        default: "Escrow",
+      },
+      symbolConfig("XLM"),
+      decimalsConfig(),
+      networkConfig,
     ],
   },
 
@@ -97,6 +336,17 @@ export const stellarComponents: StellarComponent[] = [
       "Define payment intervals",
       "Explore automated payment workflows",
     ],
+    config: [
+      {
+        key: "name",
+        label: "Plan name",
+        type: "text",
+        default: "Subscription",
+      },
+      symbolConfig("XLM"),
+      decimalsConfig(),
+      networkConfig,
+    ],
   },
 
   {
@@ -114,6 +364,22 @@ export const stellarComponents: StellarComponent[] = [
       "Build shared-control workflows",
       "Explore multi-party transaction authorization",
     ],
+    config: [
+      {
+        key: "name",
+        label: "Configuration name",
+        type: "text",
+        default: "Multi-Signature",
+      },
+      {
+        key: "symbol",
+        label: "Required signers",
+        type: "text",
+        default: "XLM",
+      },
+      decimalsConfig({ decimals: "7", disabled: true }),
+      networkConfig,
+    ],
   },
 ];
 
@@ -126,4 +392,12 @@ export const componentCategories = [
 
 export function getComponentBySlug(slug: string) {
   return stellarComponents.find((component) => component.slug === slug);
+}
+
+export function getConfigDefaults(
+  component: StellarComponent,
+): Record<string, string> {
+  return Object.fromEntries(
+    (component.config ?? []).map((field) => [field.key, field.default]),
+  );
 }

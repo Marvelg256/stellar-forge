@@ -3,273 +3,126 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { stellarComponents } from "@/data/components";
+import {
+  getConfigDefaults,
+  stellarComponents,
+  type ConfigField,
+  type StellarComponent,
+} from "@/data/components";
 
-type ComponentSlug =
-  | "token"
-  | "payment"
-  | "access-control"
-  | "escrow"
-  | "subscription"
-  | "multi-signature";
+function buildGeneratedCode(
+  component: StellarComponent,
+  values: Record<string, string>,
+): string {
+  const header = (component.config ?? [])
+    .map((field) => `// ${field.label}: ${values[field.key]}`)
+    .join("\n");
 
-type Network = "testnet" | "futurenet";
-
-const generatedPatterns: Record<ComponentSlug, string> = {
-  token: `#[contract]
-pub struct TokenComponent;
-
-#[contractimpl]
-impl TokenComponent {
-    pub fn transfer(
-        env: Env,
-        to: Address,
-        amount: i128,
-    ) {
-        // implementation
-    }
-}`,
-
-  payment: `#[contract]
-pub struct PaymentComponent;
-
-#[contractimpl]
-impl PaymentComponent {
-    pub fn pay(
-        env: Env,
-        to: Address,
-        amount: i128,
-    ) {
-        // implementation
-    }
-}`,
-
-  "access-control": `#[contract]
-pub struct AccessControlComponent;
-
-#[contractimpl]
-impl AccessControlComponent {
-    pub fn authorize(
-        env: Env,
-        account: Address,
-    ) {
-        // permission check
-    }
-}`,
-
-  escrow: `#[contract]
-pub struct EscrowComponent;
-
-#[contractimpl]
-impl EscrowComponent {
-    pub fn deposit(
-        env: Env,
-        depositor: Address,
-        amount: i128,
-    ) {
-        // escrow deposit
-    }
-
-    pub fn release(
-        env: Env,
-        recipient: Address,
-    ) {
-        // conditional release
-    }
-}`,
-
-  subscription: `#[contract]
-pub struct SubscriptionComponent;
-
-#[contractimpl]
-impl SubscriptionComponent {
-    pub fn subscribe(
-        env: Env,
-        subscriber: Address,
-    ) {
-        // create subscription
-    }
-
-    pub fn charge(
-        env: Env,
-        subscriber: Address,
-        amount: i128,
-    ) {
-        // recurring payment
-    }
-}`,
-
-  "multi-signature": `#[contract]
-pub struct MultiSignatureComponent;
-
-#[contractimpl]
-impl MultiSignatureComponent {
-    pub fn approve(
-        env: Env,
-        signer: Address,
-    ) {
-        // record approval
-    }
-
-    pub fn execute(
-        env: Env,
-    ) {
-        // execute after required approvals
-    }
-}`,
-};
-
-const defaultValues: Record<
-  ComponentSlug,
-  {
-    name: string;
-    symbol: string;
-    decimals: string;
-    network: Network;
+  if (!component.implementation || !component.interface) {
+    return [
+      header,
+      "",
+      "// No implemented interface spec yet.",
+      "// This component is currently a catalog concept.",
+      "// Its real interface will be defined when the contract lands.",
+    ].join("\n");
   }
-> = {
-  token: {
-    name: "Forge Token",
-    symbol: "FORGE",
-    decimals: "7",
-    network: "testnet",
-  },
 
-  payment: {
-    name: "Payment",
-    symbol: "XLM",
-    decimals: "7",
-    network: "testnet",
-  },
+  const signatures = component.interface
+    .map((fn) => {
+      const params = fn.params.map((p) => `${p.name}: ${p.type}`).join(", ");
+      const returns = fn.returns ? ` -> ${fn.returns}` : "";
+      return `    pub fn ${fn.name}(${params})${returns};`;
+    })
+    .join("\n");
 
-  "access-control": {
-    name: "Admin",
-    symbol: "ADMIN",
-    decimals: "0",
-    network: "testnet",
-  },
-
-  escrow: {
-    name: "Escrow",
-    symbol: "XLM",
-    decimals: "7",
-    network: "testnet",
-  },
-
-  subscription: {
-    name: "Subscription",
-    symbol: "XLM",
-    decimals: "7",
-    network: "testnet",
-  },
-
-  "multi-signature": {
-    name: "Multi-Signature",
-    symbol: "XLM",
-    decimals: "7",
-    network: "testnet",
-  },
-};
+  return [
+    header,
+    "",
+    `// Source: ${component.implementation.sourcePath}`,
+    "",
+    `#[contract]`,
+    `pub struct ${component.name};`,
+    "",
+    "#[contractimpl]",
+    `impl ${component.name} {`,
+    signatures,
+    "}",
+  ].join("\n");
+}
 
 export default function PlaygroundPage() {
-  const [selectedSlug, setSelectedSlug] =
-    useState<ComponentSlug>("token");
-
-  const [name, setName] = useState(defaultValues.token.name);
-  const [symbol, setSymbol] = useState(defaultValues.token.symbol);
-  const [decimals, setDecimals] = useState(defaultValues.token.decimals);
-  const [network, setNetwork] = useState<Network>(
-    defaultValues.token.network,
+  const [selectedSlug, setSelectedSlug] = useState<string>("token");
+  const [configValues, setConfigValues] = useState<Record<string, string>>(
+    () => getConfigDefaults(stellarComponents[0]),
   );
-
-  const [generatedCode, setGeneratedCode] = useState(
-    generatedPatterns.token,
+  const [generatedCode, setGeneratedCode] = useState(() =>
+    buildGeneratedCode(stellarComponents[0], getConfigDefaults(stellarComponents[0])),
   );
 
   const selectedComponent =
-    stellarComponents.find(
-      (component) => component.slug === selectedSlug,
-    ) ?? stellarComponents[0];
+    stellarComponents.find((component) => component.slug === selectedSlug) ??
+    stellarComponents[0];
 
-  function selectComponent(slug: ComponentSlug) {
-    const defaults = defaultValues[slug];
+  function selectComponent(slug: string) {
+    const component = stellarComponents.find((c) => c.slug === slug);
+    if (!component) return;
 
+    const defaults = getConfigDefaults(component);
     setSelectedSlug(slug);
-    setName(defaults.name);
-    setSymbol(defaults.symbol);
-    setDecimals(defaults.decimals);
-    setNetwork(defaults.network);
-    setGeneratedCode(generatedPatterns[slug]);
+    setConfigValues(defaults);
+    setGeneratedCode(buildGeneratedCode(component, defaults));
+  }
+
+  function updateConfigValue(key: string, value: string) {
+    setConfigValues((previous) => ({ ...previous, [key]: value }));
   }
 
   function generatePattern() {
-    let code = generatedPatterns[selectedSlug];
-
-    if (selectedSlug === "token") {
-      code = `// ${name} (${symbol})
-// Decimals: ${decimals}
-// Network: ${network}
-
-${generatedPatterns.token}`;
-    }
-
-    if (selectedSlug === "payment") {
-      code = `// Payment pattern
-// Asset: ${symbol}
-// Network: ${network}
-
-${generatedPatterns.payment}`;
-    }
-
-    if (selectedSlug === "access-control") {
-      code = `// Access control pattern
-// Role: ${name}
-// Network: ${network}
-
-${generatedPatterns["access-control"]}`;
-    }
-
-    if (selectedSlug === "escrow") {
-      code = `// Escrow pattern
-// Asset: ${symbol}
-// Network: ${network}
-
-${generatedPatterns.escrow}`;
-    }
-
-    if (selectedSlug === "subscription") {
-      code = `// Subscription pattern
-// Plan: ${name}
-// Asset: ${symbol}
-// Network: ${network}
-
-${generatedPatterns.subscription}`;
-    }
-
-    if (selectedSlug === "multi-signature") {
-      code = `// Multi-signature pattern
-// Configuration: ${name}
-// Required signers: ${symbol}
-// Network: ${network}
-
-${generatedPatterns["multi-signature"]}`;
-    }
-
-    setGeneratedCode(code);
+    setGeneratedCode(buildGeneratedCode(selectedComponent, configValues));
   }
 
   function resetConfiguration() {
-    const defaults = defaultValues[selectedSlug];
-
-    setName(defaults.name);
-    setSymbol(defaults.symbol);
-    setDecimals(defaults.decimals);
-    setNetwork(defaults.network);
-    setGeneratedCode(generatedPatterns[selectedSlug]);
+    const defaults = getConfigDefaults(selectedComponent);
+    setConfigValues(defaults);
+    setGeneratedCode(buildGeneratedCode(selectedComponent, defaults));
   }
 
-  const isAccessControl = selectedSlug === "access-control";
-  const isMultiSignature = selectedSlug === "multi-signature";
+  function renderConfigField(field: ConfigField) {
+    if (field.type === "select") {
+      return (
+        <select
+          value={configValues[field.key]}
+          onChange={(event) => updateConfigValue(field.key, event.target.value)}
+          disabled={field.disabled}
+          className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-sans text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {(field.options ?? []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    const isNumber = field.type === "number";
+
+    return (
+      <input
+        type={field.type}
+        value={configValues[field.key]}
+        onChange={(event) => updateConfigValue(field.key, event.target.value)}
+        min={field.min}
+        max={field.max}
+        disabled={field.disabled}
+        className={`mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar disabled:cursor-not-allowed disabled:opacity-50 ${
+          field.mono ? "font-mono" : "font-sans"
+        }`}
+        {...(isNumber ? { inputMode: "numeric" as const } : {})}
+      />
+    );
+  }
 
   return (
     <main className="flex-1">
@@ -301,9 +154,7 @@ ${generatedPatterns["multi-signature"]}`;
                   <button
                     key={component.slug}
                     type="button"
-                    onClick={() =>
-                      selectComponent(component.slug as ComponentSlug)
-                    }
+                    onClick={() => selectComponent(component.slug)}
                     className={`w-full rounded-default border px-3 py-3 text-left transition-colors duration-150 ${
                       selectedSlug === component.slug
                         ? "border-accent-stellar"
@@ -352,74 +203,15 @@ ${generatedPatterns["multi-signature"]}`;
               </p>
 
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <label className="block">
-                  <span className="font-sans text-sm text-text-primary">
-                    {isAccessControl
-                      ? "Role name"
-                      : isMultiSignature
-                        ? "Configuration name"
-                        : selectedSlug === "subscription"
-                          ? "Plan name"
-                          : selectedSlug === "escrow"
-                            ? "Escrow name"
-                            : selectedSlug === "payment"
-                              ? "Payment name"
-                              : "Token name"}
-                  </span>
+                {(selectedComponent.config ?? []).map((field) => (
+                  <label key={field.key} className="block">
+                    <span className="font-sans text-sm text-text-primary">
+                      {field.label}
+                    </span>
 
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-sans text-sm text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="font-sans text-sm text-text-primary">
-                    {isMultiSignature ? "Required signers" : "Symbol / Asset"}
-                  </span>
-
-                  <input
-                    type="text"
-                    value={symbol}
-                    onChange={(event) => setSymbol(event.target.value)}
-                    className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="font-sans text-sm text-text-primary">
-                    Decimals
-                  </span>
-
-                  <input
-                    type="number"
-                    value={decimals}
-                    onChange={(event) => setDecimals(event.target.value)}
-                    min="0"
-                    max="18"
-                    disabled={isAccessControl || isMultiSignature}
-                    className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="font-sans text-sm text-text-primary">
-                    Network
-                  </span>
-
-                  <select
-                    value={network}
-                    onChange={(event) =>
-                      setNetwork(event.target.value as Network)
-                    }
-                    className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-sans text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
-                  >
-                    <option value="testnet">Stellar Testnet</option>
-                    <option value="futurenet">Stellar Futurenet</option>
-                  </select>
-                </label>
+                    {renderConfigField(field)}
+                  </label>
+                ))}
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
