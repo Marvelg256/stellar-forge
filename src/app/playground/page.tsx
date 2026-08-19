@@ -91,12 +91,15 @@ export default function PlaygroundPage() {
   }
 
   function selectComponent(slug: string) {
-    if (!stellarComponents.some((component) => component.slug === slug)) return;
-    window.history.replaceState(
-      null,
-      "",
-      `/playground?component=${encodeURIComponent(slug)}`,
-    );
+  if (!stellarComponents.some((component) => component.slug === slug)) return;
+
+  window.history.replaceState(
+    null,
+    "",
+    `/playground?component=${encodeURIComponent(slug)}`,
+  );
+
+  window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   function updateConfigValue(key: string, value: string) {
