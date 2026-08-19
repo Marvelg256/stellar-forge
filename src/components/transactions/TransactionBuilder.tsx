@@ -16,7 +16,7 @@ import {
   initialBuilderState,
   validateBuilderState,
 } from "@/lib/transactions/builder";
-import { prepareTransaction } from "@/lib/transactions/prepare";
+import { prepareTransactionRequest } from "@/lib/transactions/client";
 import {
   TRANSACTION_NETWORKS,
   type TransactionNetwork,
@@ -99,11 +99,15 @@ export function TransactionBuilder() {
     const request = buildTransactionRequest(state);
     setPreparation({ phase: "built", request });
 
-    const result = await prepareTransaction(request, stellarComponents);
+    setPreparation({ phase: "preparing", request });
+
+    const result = await prepareTransactionRequest(request);
     setPreparation(
       result.status === "prepared"
         ? { phase: "prepared", result }
-        : { phase: "failed", result },
+        : result.status === "blocked"
+          ? { phase: "blocked", result }
+          : { phase: "failed", result },
     );
   }
 

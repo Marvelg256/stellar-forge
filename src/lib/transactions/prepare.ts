@@ -1,7 +1,9 @@
 import type { StellarComponent } from "@/data/components";
-import { networkConfig } from "@/lib/transactions/networks";
+import { buildInvocationArgs } from "@/lib/transactions/args";
+import { getDeployment } from "@/lib/transactions/deployments";
+import { networkConfig, networkLabel } from "@/lib/transactions/networks";
+import { simulateSorobanInvocation } from "@/lib/transactions/rpc";
 import type {
-  PreparedTransaction,
   TransactionPreparationResult,
   TransactionRequest,
 } from "@/lib/transactions/types";
@@ -24,7 +26,48 @@ export async function prepareTransaction(
     (fn) => fn.name === request.method,
   ) as NonNullable<StellarComponent["interface"]>[number];
 
-  const prepared: PreparedTransaction = {
+  const deployment = getDeployment(request.network, request.component);
+
+  if (!deployment) {
+    return {
+      status: "blocked",
+      request,
+      error: {
+        code: "contract-not-deployed",
+        message: `${component.name} has source code, but no deployed contract address is configured for ${networkLabel(request.network)}, so Soroban simulation cannot run yet.`,
+      },
+    };
+  }
+
+  const argsResult = buildInvocationArgs(method.params, request.parameters);
+
+  if (!argsResult.ok) {
+    return {
+      status: "failed",
+      request,
+      errors: [],
+      preparationError: argsResult.error,
+    };
+  }
+
+  const invocation = await simulateSorobanInvocation({
+    network: request.network,
+    contractAddress: deployment,
+    method: method.name,
+    args: argsResult.scVals,
+    sourceAccount: request.sourceAccount,
+  });
+
+  if (!invocation.ok) {
+    return {
+      status: "failed",
+      request,
+      errors: [],
+      preparationError: invocation.error,
+    };
+  }
+
+  return {
     status: "prepared",
     request,
     component: {
@@ -41,11 +84,11 @@ export async function prepareTransaction(
     },
     network: networkConfig(request.network),
     sourceAccount: request.sourceAccount,
+    contract: { address: deployment },
+    simulation: invocation.simulation,
     metadata: {
       preparedAt: new Date().toISOString(),
-      networkConnected: false,
+      networkConnected: true,
     },
   };
-
-  return prepared;
 }

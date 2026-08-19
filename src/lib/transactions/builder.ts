@@ -3,6 +3,7 @@ import type {
   ParameterSpec,
   StellarComponent,
 } from "@/data/components";
+import { getDeployment } from "@/lib/transactions/deployments";
 import { networkLabel } from "@/lib/transactions/networks";
 import type {
   TransactionBuilderState,
@@ -118,13 +119,15 @@ function previewStatusLabel(
     case "draft":
       return validationOk ? "Ready to build" : "Waiting for required parameters";
     case "built":
-      return "Ready for preparation";
+      return "Ready for simulation";
     case "preparing":
-      return "Preparing...";
+      return "Simulating...";
     case "prepared":
-      return "Prepared - ready for network preparation";
+      return "Simulation successful";
     case "failed":
-      return "Validation failed";
+      return "Simulation failed";
+    case "blocked":
+      return "Contract deployment required";
   }
 }
 
@@ -141,6 +144,7 @@ export function buildPreview(
     : undefined;
   const request = buildTransactionRequest(state);
   const validation = validateTransactionRequest(request, components);
+  const deployment = getDeployment(state.network, state.componentSlug);
 
   const requestToShow =
     preparation.phase === "draft"
@@ -148,6 +152,13 @@ export function buildPreview(
       : preparation.phase === "built" || preparation.phase === "preparing"
         ? preparation.request
         : preparation.result.request;
+
+  const preparationError =
+    preparation.phase === "failed"
+      ? preparation.result.preparationError
+      : preparation.phase === "blocked"
+        ? preparation.result.error
+        : undefined;
 
   return {
     networkLabel: networkLabel(state.network),
@@ -163,13 +174,14 @@ export function buildPreview(
     statusLabel: previewStatusLabel(preparation.phase, validation.ok),
     errors: validation.errors,
     request: requestToShow,
+    deploymentStatus: deployment ? "configured" : "missing",
+    contractAddress: deployment ?? undefined,
+    preparationError,
+    simulation:
+      preparation.phase === "prepared" ? preparation.result.simulation : undefined,
     preparedAt:
       preparation.phase === "prepared"
         ? preparation.result.metadata.preparedAt
-        : undefined,
-    networkConnected:
-      preparation.phase === "prepared"
-        ? preparation.result.metadata.networkConnected
         : undefined,
   };
 }

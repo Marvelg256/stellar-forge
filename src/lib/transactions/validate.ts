@@ -1,5 +1,6 @@
 import type { ParameterSpec, StellarComponent } from "@/data/components";
 import { isTransactionNetwork, networkLabel } from "@/lib/transactions/networks";
+import { isSupportedParameterType } from "@/lib/transactions/parameter-types";
 import type {
   TransactionRequest,
   TransactionValidationError,
@@ -69,6 +70,15 @@ export function validateTransactionRequest(
       });
     } else {
       for (const param of method.params) {
+        if (!isSupportedParameterType(param.type)) {
+          errors.push({
+            code: "parameter.unsupported-type",
+            field: param.name,
+            message: `Unsupported Soroban parameter type: ${param.type}.`,
+          });
+          continue;
+        }
+
         const value = request.parameters[param.name];
         if (!value?.trim()) {
           errors.push({

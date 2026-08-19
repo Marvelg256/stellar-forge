@@ -28,6 +28,7 @@ export type TransactionValidationCode =
   | "method.constructor"
   | "parameter.missing"
   | "parameter.invalid-type"
+  | "parameter.unsupported-type"
   | "source-account.missing";
 
 export interface TransactionValidationError {
@@ -46,17 +47,51 @@ export interface TransactionValidation {
   canBuild: boolean;
 }
 
+export type TransactionPreparationErrorCode =
+  | "network.unsupported"
+  | "contract-not-deployed"
+  | "contract-address-invalid"
+  | "source-account-invalid"
+  | "source-account-not-found"
+  | "parameter-unsupported-type"
+  | "parameter-invalid-value"
+  | "rpc-unavailable"
+  | "simulation-failed";
+
+export interface TransactionPreparationError {
+  code: TransactionPreparationErrorCode;
+  message: string;
+  detail?: string;
+}
+
 export type TransactionPreparationPhase =
   | "draft"
   | "built"
   | "preparing"
   | "prepared"
-  | "failed";
+  | "failed"
+  | "blocked";
 
 export interface PreparedArgument {
   name: string;
   type: string;
   value: string;
+}
+
+export interface SimulationInfo {
+  success: true;
+  latestLedger: number;
+  minResourceFee: string;
+  cost: {
+    cpuInstructions: string;
+    memoryBytes: string;
+  };
+  result: {
+    type: string;
+    value: string;
+  } | null;
+  isReadCall: boolean;
+  transactionData: string;
 }
 
 export interface TransactionPreparationMetadata {
@@ -77,6 +112,10 @@ export interface PreparedTransaction {
   };
   network: NetworkConfig;
   sourceAccount: string;
+  contract: {
+    address: string;
+  };
+  simulation: SimulationInfo;
   metadata: TransactionPreparationMetadata;
 }
 
@@ -84,9 +123,19 @@ export interface FailedTransaction {
   status: "failed";
   request: TransactionRequest;
   errors: TransactionValidationError[];
+  preparationError?: TransactionPreparationError;
 }
 
-export type TransactionPreparationResult = PreparedTransaction | FailedTransaction;
+export interface BlockedTransaction {
+  status: "blocked";
+  request: TransactionRequest;
+  error: TransactionPreparationError;
+}
+
+export type TransactionPreparationResult =
+  | PreparedTransaction
+  | FailedTransaction
+  | BlockedTransaction;
 
 export interface DraftPreparation {
   phase: "draft";
@@ -112,12 +161,18 @@ export interface FailedPreparation {
   result: FailedTransaction;
 }
 
+export interface BlockedPreparation {
+  phase: "blocked";
+  result: BlockedTransaction;
+}
+
 export type TransactionPreparation =
   | DraftPreparation
   | BuiltPreparation
   | PreparingPreparation
   | PreparedPreparation
-  | FailedPreparation;
+  | FailedPreparation
+  | BlockedPreparation;
 
 export interface TransactionPreviewArgument {
   name: string;
@@ -135,6 +190,9 @@ export interface TransactionPreviewData {
   statusLabel: string;
   errors: TransactionValidationError[];
   request: TransactionRequest | null;
+  deploymentStatus: "configured" | "missing";
+  contractAddress?: string;
+  preparationError?: TransactionPreparationError;
+  simulation?: SimulationInfo;
   preparedAt?: string;
-  networkConnected?: boolean;
 }
