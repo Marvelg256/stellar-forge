@@ -9,6 +9,7 @@ const statusClasses: Record<TransactionPreparationPhase, string> = {
   built: "text-accent-stellar",
   preparing: "text-accent-forge",
   prepared: "text-accent-stellar",
+  signed: "text-accent-stellar",
   failed: "text-accent-forge",
   blocked: "text-accent-forge",
 };
@@ -210,7 +211,29 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
                 {preview.simulation.isReadCall ? "Yes" : "No"}
               </dd>
             </div>
+
+            {preview.expiresAt !== undefined && preview.expiresAt > 0 && (
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="font-sans text-xs text-text-secondary">
+                  Expires at
+                </dt>
+                <dd
+                  className={`font-mono text-xs ${
+                    preview.expired ? "text-accent-forge" : "text-text-primary"
+                  }`}
+                >
+                  {new Date(preview.expiresAt).toLocaleTimeString()}
+                </dd>
+              </div>
+            )}
           </dl>
+
+          {preview.expired && (
+            <p className="mt-3 rounded-default border border-accent-forge/40 bg-accent-forge/10 p-2 font-sans text-xs leading-relaxed text-text-primary">
+              This prepared transaction has expired. It will be re-prepared
+              automatically when you sign.
+            </p>
+          )}
 
           {preview.simulation.transactionData && (
             <div className="mt-3">
@@ -222,6 +245,103 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
                 <code>{preview.simulation.transactionData}</code>
               </pre>
             </div>
+          )}
+        </div>
+      )}
+
+      {preview.walletStatus === "connected" && (
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="font-sans text-sm text-text-secondary">Wallet</p>
+
+          <p className="mt-2 break-all font-mono text-xs text-text-primary">
+            {preview.walletAddress}
+          </p>
+
+          {preview.walletNetworkMismatch && (
+            <p className="mt-2 font-sans text-xs leading-relaxed text-accent-forge">
+              Wallet network ({preview.walletNetworkName ?? "unknown"}) does not
+              match the selected network ({preview.networkLabel}).
+            </p>
+          )}
+        </div>
+      )}
+
+      {preview.walletStatus !== "connected" && (
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="font-sans text-sm text-text-secondary">Wallet</p>
+
+          <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
+            {preview.walletStatus === "unavailable"
+              ? "Freighter is not installed or not available in this browser."
+              : preview.walletStatus === "checking"
+                ? "Checking for a connected wallet…"
+                : preview.walletStatus === "connecting"
+                  ? "Waiting for wallet approval…"
+                  : "No wallet connected. Connect Freighter to sign transactions."}
+          </p>
+
+          {preview.walletError && (
+            <p className="mt-2 font-sans text-xs leading-relaxed text-accent-forge">
+              {preview.walletError.message}
+            </p>
+          )}
+        </div>
+      )}
+
+      {preview.signingPhase !== "idle" && (
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="font-sans text-sm text-text-secondary">Signing</p>
+
+          {preview.signingPhase === "signing" && (
+            <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
+              Waiting for wallet approval…
+            </p>
+          )}
+
+          {preview.signingPhase === "sign-failed" && preview.signingError && (
+            <p className="mt-2 flex flex-col gap-1 rounded-default border border-border bg-canvas/60 p-2">
+              <span className="font-mono text-[11px] text-accent-forge">
+                {preview.signingError.code}
+              </span>
+              <span className="font-sans text-xs text-text-primary">
+                {preview.signingError.message}
+              </span>
+              {preview.signingError.detail && (
+                <span className="font-mono text-[11px] text-text-secondary">
+                  {preview.signingError.detail}
+                </span>
+              )}
+            </p>
+          )}
+
+          {preview.signingPhase === "signed" && (
+            <>
+              <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
+                Signed by {preview.signerAddress}
+                {preview.signedAt && (
+                  <>
+                    {" "}
+                    at{" "}
+                    <span className="font-mono text-[11px]">
+                      {new Date(preview.signedAt).toLocaleTimeString()}
+                    </span>
+                  </>
+                )}
+                . Nothing has been submitted on-chain.
+              </p>
+
+              {preview.signedXdr && (
+                <div className="mt-3">
+                  <p className="font-sans text-xs text-text-secondary">
+                    Signed transaction XDR
+                  </p>
+
+                  <pre className="mt-2 overflow-x-auto rounded-default border border-border bg-canvas/60 p-3 font-mono text-[11px] leading-relaxed text-text-secondary">
+                    <code>{preview.signedXdr}</code>
+                  </pre>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -241,7 +361,7 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
             <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
               Simulation succeeded against the live{" "}
               {preview.networkLabel} RPC. Nothing has been signed or submitted
-              on-chain.
+              on-chain. Sign the prepared transaction with a connected wallet.
             </p>
             {preview.preparedAt && (
               <p className="mt-1 font-mono text-[11px] text-text-secondary">
@@ -249,6 +369,13 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
               </p>
             )}
           </>
+        )}
+
+        {preview.phase === "signed" && (
+          <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
+            The transaction has been signed by your wallet. Submission is not
+            available yet.
+          </p>
         )}
 
         {preview.phase === "blocked" && (

@@ -4,15 +4,17 @@ import type {
   StellarComponent,
 } from "@/data/components";
 import { getDeployment } from "@/lib/transactions/deployments";
-import { networkLabel } from "@/lib/transactions/networks";
+import { networkConfig, networkLabel } from "@/lib/transactions/networks";
 import type {
   TransactionBuilderState,
   TransactionPreparation,
   TransactionPreparationPhase,
   TransactionPreviewData,
   TransactionRequest,
+  TransactionSigningState,
   TransactionValidation,
 } from "@/lib/transactions/types";
+import type { WalletState } from "@/lib/wallet/types";
 import { validateTransactionRequest } from "@/lib/transactions/validate";
 
 export function callableMethods(
@@ -124,6 +126,8 @@ function previewStatusLabel(
       return "Simulating...";
     case "prepared":
       return "Simulation successful";
+    case "signed":
+      return "Signed by wallet";
     case "failed":
       return "Simulation failed";
     case "blocked":
@@ -135,6 +139,8 @@ export function buildPreview(
   state: TransactionBuilderState,
   components: StellarComponent[],
   preparation: TransactionPreparation,
+  wallet: WalletState,
+  signing: TransactionSigningState,
 ): TransactionPreviewData {
   const component = components.find(
     (candidate) => candidate.slug === state.componentSlug,
@@ -151,7 +157,9 @@ export function buildPreview(
       ? null
       : preparation.phase === "built" || preparation.phase === "preparing"
         ? preparation.request
-        : preparation.result.request;
+        : preparation.phase === "signed"
+          ? preparation.request
+          : preparation.result.request;
 
   const preparationError =
     preparation.phase === "failed"
@@ -159,6 +167,13 @@ export function buildPreview(
       : preparation.phase === "blocked"
         ? preparation.result.error
         : undefined;
+
+  const walletNetworkMismatch =
+    wallet.status === "connected" &&
+    wallet.networkPassphrase !== networkConfig(state.network).passphrase;
+
+  const preparedSimulation =
+    preparation.phase === "prepared" ? preparation.result.simulation : undefined;
 
   return {
     networkLabel: networkLabel(state.network),
@@ -177,11 +192,27 @@ export function buildPreview(
     deploymentStatus: deployment ? "configured" : "missing",
     contractAddress: deployment ?? undefined,
     preparationError,
-    simulation:
-      preparation.phase === "prepared" ? preparation.result.simulation : undefined,
+    simulation: preparedSimulation,
     preparedAt:
       preparation.phase === "prepared"
         ? preparation.result.metadata.preparedAt
         : undefined,
+    expiresAt: preparedSimulation?.expiresAt,
+    expired: Boolean(
+      preparedSimulation &&
+        preparedSimulation.expiresAt > 0 &&
+        Date.now() >= preparedSimulation.expiresAt,
+    ),
+    walletStatus: wallet.status,
+    walletAddress: wallet.address ?? undefined,
+    walletNetworkName: wallet.networkName ?? undefined,
+    walletNetworkPassphrase: wallet.networkPassphrase ?? undefined,
+    walletError: wallet.error ?? undefined,
+    walletNetworkMismatch,
+    signingPhase: signing.phase,
+    signingError: signing.error,
+    signedXdr: signing.signedXdr,
+    signerAddress: signing.signerAddress,
+    signedAt: signing.signedAt,
   };
 }

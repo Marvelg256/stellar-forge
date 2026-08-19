@@ -14,10 +14,10 @@ export default function TransactionsPage() {
           </h1>
 
           <p className="mt-5 font-sans text-base leading-7 text-text-secondary sm:text-lg">
-            Construct a transaction before connecting a wallet. Select an
+            Construct a transaction, simulate it against a live Soroban RPC,
+            and sign the prepared envelope with your Freighter wallet. Select an
             implemented component, choose a contract method, fill its
-            parameters, and build a typed transaction request that can be
-            signed and submitted in a later phase.
+            parameters, and build a typed transaction request.
           </p>
         </div>
 

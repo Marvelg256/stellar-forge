@@ -6,6 +6,7 @@ import {
   scValToNative,
   xdr,
 } from "@stellar/stellar-sdk";
+import type { Transaction } from "@stellar/stellar-sdk";
 import {
   Api,
   Server,
@@ -140,6 +141,7 @@ export async function simulateSorobanInvocation(
         : null,
       isReadCall,
       transactionData: assembledXdr,
+      expiresAt: envelopeExpiryMs(tx),
     },
   };
 }
@@ -199,6 +201,13 @@ function truncate(value: string): string {
   return value.length > MAX_DETAIL_LENGTH
     ? `${value.slice(0, MAX_DETAIL_LENGTH)}...`
     : value;
+}
+
+function envelopeExpiryMs(tx: Transaction): number {
+  const bounds = tx.timeBounds;
+  if (!bounds) return 0;
+  const maxTime = Number(bounds.maxTime);
+  return maxTime > 0 ? maxTime * 1000 : 0;
 }
 
 function nativeToDisplay(value: unknown): string {

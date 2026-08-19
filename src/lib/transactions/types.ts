@@ -2,6 +2,7 @@ import type {
   NetworkConfig,
   TransactionNetwork,
 } from "@/lib/transactions/networks";
+import type { WalletError, WalletStatus } from "@/lib/wallet/types";
 
 export interface TransactionBuilderState {
   componentSlug: string;
@@ -69,6 +70,7 @@ export type TransactionPreparationPhase =
   | "built"
   | "preparing"
   | "prepared"
+  | "signed"
   | "failed"
   | "blocked";
 
@@ -92,6 +94,11 @@ export interface SimulationInfo {
   } | null;
   isReadCall: boolean;
   transactionData: string;
+  /**
+   * Unix milliseconds at which the prepared envelope's time bounds expire.
+   * After this point the envelope must be re-prepared before signing.
+   */
+  expiresAt: number;
 }
 
 export interface TransactionPreparationMetadata {
@@ -156,6 +163,11 @@ export interface PreparedPreparation {
   result: PreparedTransaction;
 }
 
+export interface SignedPreparation {
+  phase: "signed";
+  request: TransactionRequest;
+}
+
 export interface FailedPreparation {
   phase: "failed";
   result: FailedTransaction;
@@ -171,6 +183,7 @@ export type TransactionPreparation =
   | BuiltPreparation
   | PreparingPreparation
   | PreparedPreparation
+  | SignedPreparation
   | FailedPreparation
   | BlockedPreparation;
 
@@ -195,4 +208,31 @@ export interface TransactionPreviewData {
   preparationError?: TransactionPreparationError;
   simulation?: SimulationInfo;
   preparedAt?: string;
+  expiresAt?: number;
+  expired: boolean;
+  walletStatus: WalletStatus;
+  walletAddress?: string;
+  walletNetworkName?: string;
+  walletNetworkPassphrase?: string;
+  walletError?: WalletError;
+  walletNetworkMismatch: boolean;
+  signingPhase: TransactionSigningPhase;
+  signingError?: WalletError;
+  signedXdr?: string;
+  signerAddress?: string;
+  signedAt?: string;
+}
+
+export type TransactionSigningPhase =
+  | "idle"
+  | "signing"
+  | "signed"
+  | "sign-failed";
+
+export interface TransactionSigningState {
+  phase: TransactionSigningPhase;
+  error?: WalletError;
+  signedXdr?: string;
+  signerAddress?: string;
+  signedAt?: string;
 }
