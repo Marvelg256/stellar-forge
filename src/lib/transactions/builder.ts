@@ -12,6 +12,7 @@ import type {
   TransactionPreviewData,
   TransactionRequest,
   TransactionSigningState,
+  TransactionSubmissionState,
   TransactionValidation,
 } from "@/lib/transactions/types";
 import type { WalletState } from "@/lib/wallet/types";
@@ -141,6 +142,7 @@ export function buildPreview(
   preparation: TransactionPreparation,
   wallet: WalletState,
   signing: TransactionSigningState,
+  submission: TransactionSubmissionState,
 ): TransactionPreviewData {
   const component = components.find(
     (candidate) => candidate.slug === state.componentSlug,
@@ -214,5 +216,12 @@ export function buildPreview(
     signedXdr: signing.signedXdr,
     signerAddress: signing.signerAddress,
     signedAt: signing.signedAt,
+    submissionPhase: submission.phase,
+    submissionStatus: submission.status,
+    submissionError: submission.error,
+    submissionTransactionHash: submission.transactionHash,
+    submissionReturnValue: submission.returnValue,
+    submissionDetail: submission.detail,
+    submittedAt: submission.submittedAt,
   };
 }

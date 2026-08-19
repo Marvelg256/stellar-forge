@@ -178,6 +178,8 @@ function createServer(network: NetworkConfig): Server | null {
   }
 }
 
+export { createServer };
+
 function effectiveRpcUrl(network: NetworkConfig): string {
   if (network.id === "testnet") {
     return process.env.STELLAR_RPC_TESTNET_URL ?? network.rpcUrl;
@@ -216,3 +218,5 @@ function nativeToDisplay(value: unknown): string {
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
+
+export { nativeToDisplay };

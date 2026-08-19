@@ -346,6 +346,86 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
         </div>
       )}
 
+      {preview.submissionPhase !== "idle" && (
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="font-sans text-sm text-text-secondary">Submission</p>
+
+          {preview.submissionPhase === "submitting" && (
+            <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
+              Submitting the signed transaction to {preview.networkLabel} and
+              waiting for confirmation…
+            </p>
+          )}
+
+          {preview.submissionPhase === "submit-failed" &&
+            preview.submissionError && (
+              <p className="mt-2 flex flex-col gap-1 rounded-default border border-border bg-canvas/60 p-2">
+                <span className="font-mono text-[11px] text-accent-forge">
+                  {preview.submissionError.code}
+                </span>
+                <span className="font-sans text-xs text-text-primary">
+                  {preview.submissionError.message}
+                </span>
+                {preview.submissionError.detail && (
+                  <span className="font-mono text-[11px] text-text-secondary">
+                    {preview.submissionError.detail}
+                  </span>
+                )}
+              </p>
+            )}
+
+          {preview.submissionPhase === "submitted" && (
+            <div className="mt-3 space-y-2">
+              <p
+                className={`font-mono text-xs ${
+                  preview.submissionStatus === "SUCCESS"
+                    ? "text-accent-stellar"
+                    : "text-accent-forge"
+                }`}
+              >
+                {preview.submissionStatus}
+              </p>
+
+              {preview.submissionTransactionHash && (
+                <div className="flex flex-col gap-1">
+                  <span className="font-sans text-xs text-text-secondary">
+                    Transaction hash
+                  </span>
+                  <span className="break-all font-mono text-[11px] text-text-primary">
+                    {preview.submissionTransactionHash}
+                  </span>
+                </div>
+              )}
+
+              {preview.submissionReturnValue && (
+                <div className="flex flex-col gap-1">
+                  <span className="font-sans text-xs text-text-secondary">
+                    Contract return value
+                  </span>
+                  <span className="break-all font-mono text-[11px] text-text-primary">
+                    {preview.submissionReturnValue.type}:{" "}
+                    {preview.submissionReturnValue.value}
+                  </span>
+                </div>
+              )}
+
+              {preview.submissionDetail && (
+                <p className="font-sans text-xs leading-relaxed text-text-secondary">
+                  {preview.submissionDetail}
+                </p>
+              )}
+
+              {preview.submittedAt && (
+                <p className="font-mono text-[11px] text-text-secondary">
+                  Submitted at{" "}
+                  {new Date(preview.submittedAt).toLocaleTimeString()}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-5 border-t border-border pt-4">
         <p className="font-sans text-sm text-text-secondary">Status</p>
 
@@ -373,8 +453,8 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
 
         {preview.phase === "signed" && (
           <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
-            The transaction has been signed by your wallet. Submission is not
-            available yet.
+            The transaction has been signed by your wallet and is ready to
+            submit.
           </p>
         )}
 

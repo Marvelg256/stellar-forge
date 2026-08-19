@@ -17,7 +17,7 @@ import {
   initialBuilderState,
   validateBuilderState,
 } from "@/lib/transactions/builder";
-import { prepareTransactionRequest } from "@/lib/transactions/client";
+import { prepareTransactionRequest, submitSignedTransaction } from "@/lib/transactions/client";
 import {
   TRANSACTION_NETWORKS,
   networkConfig,
@@ -27,6 +27,7 @@ import type {
   TransactionBuilderState,
   TransactionPreparation,
   TransactionSigningState,
+  TransactionSubmissionState,
 } from "@/lib/transactions/types";
 import { useWallet } from "@/lib/wallet/useWallet";
 import type { WalletError } from "@/lib/wallet/types";
@@ -51,6 +52,9 @@ export function TransactionBuilder() {
     phase: "draft",
   });
   const [signing, setSigning] = useState<TransactionSigningState>({
+    phase: "idle",
+  });
+  const [submission, setSubmission] = useState<TransactionSubmissionState>({
     phase: "idle",
   });
   const [previousWalletAddress, setPreviousWalletAddress] = useState<
@@ -81,12 +85,14 @@ export function TransactionBuilder() {
     preparation,
     wallet.state,
     signing,
+    submission,
   );
 
   if (wallet.state.address !== previousWalletAddress) {
     setPreviousWalletAddress(wallet.state.address);
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
   }
 
   function selectComponent(slug: string) {
@@ -105,6 +111,7 @@ export function TransactionBuilder() {
     }));
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
   }
 
   function selectMethod(methodName: string) {
@@ -125,6 +132,7 @@ export function TransactionBuilder() {
     }));
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
   }
 
   function updateParameter(name: string, value: string) {
@@ -134,24 +142,28 @@ export function TransactionBuilder() {
     }));
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
   }
 
   function updateNetwork(network: TransactionNetwork) {
     setState((previous) => ({ ...previous, network }));
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
   }
 
   function updateSourceAccount(sourceAccount: string) {
     setState((previous) => ({ ...previous, sourceAccount }));
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
   }
 
   async function build() {
     const request = buildTransactionRequest(effectiveState);
     setPreparation({ phase: "built", request });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
 
     setPreparation({ phase: "preparing", request });
 
@@ -167,6 +179,8 @@ export function TransactionBuilder() {
 
   async function sign() {
     if (preparation.phase !== "prepared") return;
+
+    setSubmission({ phase: "idle" });
 
     if (wallet.state.status !== "connected" || !wallet.state.address) {
       setSigning({
@@ -251,10 +265,35 @@ export function TransactionBuilder() {
     }
   }
 
+  async function submit() {
+    if (signing.phase !== "signed" || !signing.signedXdr) return;
+
+    setSubmission({ phase: "submitting" });
+
+    const result = await submitSignedTransaction({
+      network: state.network,
+      signedXdr: signing.signedXdr,
+    });
+
+    if (result.ok) {
+      setSubmission({
+        phase: "submitted",
+        status: result.submission.status,
+        transactionHash: result.submission.transactionHash,
+        returnValue: result.submission.returnValue,
+        submittedAt: result.submission.submittedAt,
+        detail: result.submission.detail,
+      });
+    } else {
+      setSubmission({ phase: "submit-failed", error: result.error });
+    }
+  }
+
   function reset() {
     setState(initialBuilderState(stellarComponents));
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
   }
 
   const sourceAccountLocked = wallet.state.status === "connected";
@@ -370,6 +409,22 @@ export function TransactionBuilder() {
               : signing.phase === "signed"
                 ? "Signed"
                 : "Sign Transaction"}
+          </Button>
+
+          <Button
+            variant="secondary"
+            onClick={() => void submit()}
+            disabled={
+              signing.phase !== "signed" ||
+              submission.phase === "submitting" ||
+              submission.phase === "submitted"
+            }
+          >
+            {submission.phase === "submitting"
+              ? "Submitting…"
+              : submission.phase === "submitted"
+                ? "Submitted"
+                : "Submit Transaction"}
           </Button>
 
           <Button variant="ghost" onClick={reset}>

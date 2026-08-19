@@ -221,6 +221,16 @@ export interface TransactionPreviewData {
   signedXdr?: string;
   signerAddress?: string;
   signedAt?: string;
+  submissionPhase: TransactionSubmissionPhase;
+  submissionStatus?: TransactionSubmissionStatus;
+  submissionError?: TransactionSubmissionError;
+  submissionTransactionHash?: string;
+  submissionReturnValue?: {
+    type: string;
+    value: string;
+  } | null;
+  submissionDetail?: string;
+  submittedAt?: string;
 }
 
 export type TransactionSigningPhase =
@@ -235,4 +245,53 @@ export interface TransactionSigningState {
   signedXdr?: string;
   signerAddress?: string;
   signedAt?: string;
+}
+
+export type TransactionSubmissionPhase =
+  | "idle"
+  | "submitting"
+  | "submitted"
+  | "submit-failed";
+
+export type TransactionSubmissionStatus = "PENDING" | "SUCCESS" | "FAILED";
+
+export type TransactionSubmissionErrorCode =
+  | "input.invalid"
+  | "envelope.invalid"
+  | "envelope.unsigned"
+  | "envelope.expired"
+  | "envelope.future-expiration"
+  | "network.unsupported"
+  | "rpc-unavailable"
+  | "submit-rejected"
+  | "timed-out";
+
+export interface TransactionSubmissionError {
+  code: TransactionSubmissionErrorCode;
+  message: string;
+  detail?: string;
+}
+
+export interface TransactionSubmissionResult {
+  status: TransactionSubmissionStatus;
+  transactionHash: string;
+  submittedAt: string;
+  returnValue: {
+    type: string;
+    value: string;
+  } | null;
+  detail?: string;
+}
+
+export interface TransactionSubmissionState {
+  phase: TransactionSubmissionPhase;
+  status?: TransactionSubmissionStatus;
+  error?: TransactionSubmissionError;
+  transactionHash?: string;
+  returnValue?: {
+    type: string;
+    value: string;
+  } | null;
+  submittedAt?: string;
+  detail?: string;
 }
