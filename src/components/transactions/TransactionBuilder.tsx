@@ -16,11 +16,14 @@ import {
   initialBuilderState,
   validateBuilderState,
 } from "@/lib/transactions/builder";
+import { prepareTransaction } from "@/lib/transactions/prepare";
 import {
   TRANSACTION_NETWORKS,
   type TransactionNetwork,
-  type TransactionRequest,
-  type TransactionBuilderState,
+} from "@/lib/transactions/networks";
+import type {
+  TransactionBuilderState,
+  TransactionPreparation,
 } from "@/lib/transactions/types";
 
 const selectClass =
@@ -35,10 +38,9 @@ export function TransactionBuilder() {
   const [state, setState] = useState<TransactionBuilderState>(() =>
     initialBuilderState(stellarComponents),
   );
-  const [builtRequest, setBuiltRequest] = useState<TransactionRequest | null>(
-    null,
-  );
-  const [attempted, setAttempted] = useState(false);
+  const [preparation, setPreparation] = useState<TransactionPreparation>({
+    phase: "draft",
+  });
 
   const selectedComponent =
     implemented.find((component) => component.slug === state.componentSlug) ??
@@ -47,7 +49,7 @@ export function TransactionBuilder() {
     (fn) => fn.name === state.methodName,
   );
   const validation = validateBuilderState(state, stellarComponents);
-  const preview = buildPreview(state, stellarComponents, builtRequest !== null);
+  const preview = buildPreview(state, stellarComponents, preparation);
 
   function selectComponent(slug: string) {
     const component = implemented.find(
@@ -63,7 +65,7 @@ export function TransactionBuilder() {
       methodName: method?.name ?? "",
       parameters: method ? emptyParameters(method.params) : {},
     }));
-    setBuiltRequest(null);
+    setPreparation({ phase: "draft" });
   }
 
   function selectMethod(methodName: string) {
@@ -82,7 +84,7 @@ export function TransactionBuilder() {
       methodName: method.name,
       parameters: emptyParameters(method.params),
     }));
-    setBuiltRequest(null);
+    setPreparation({ phase: "draft" });
   }
 
   function updateParameter(name: string, value: string) {
@@ -90,20 +92,24 @@ export function TransactionBuilder() {
       ...previous,
       parameters: { ...previous.parameters, [name]: value },
     }));
-    setBuiltRequest(null);
+    setPreparation({ phase: "draft" });
   }
 
-  function build() {
-    setAttempted(true);
-    if (validation.canBuild) {
-      setBuiltRequest(buildTransactionRequest(state));
-    }
+  async function build() {
+    const request = buildTransactionRequest(state);
+    setPreparation({ phase: "built", request });
+
+    const result = await prepareTransaction(request, stellarComponents);
+    setPreparation(
+      result.status === "prepared"
+        ? { phase: "prepared", result }
+        : { phase: "failed", result },
+    );
   }
 
   function reset() {
     setState(initialBuilderState(stellarComponents));
-    setBuiltRequest(null);
-    setAttempted(false);
+    setPreparation({ phase: "draft" });
   }
 
   return (
@@ -138,12 +144,12 @@ export function TransactionBuilder() {
                     ...previous,
                     network: event.target.value as TransactionNetwork,
                   }));
-                  setBuiltRequest(null);
+                  setPreparation({ phase: "draft" });
                 }}
                 className={selectClass}
               >
                 {TRANSACTION_NETWORKS.map((network) => (
-                  <option key={network.value} value={network.value}>
+                  <option key={network.id} value={network.id}>
                     {network.label}
                   </option>
                 ))}
@@ -166,7 +172,7 @@ export function TransactionBuilder() {
                     ...previous,
                     sourceAccount: event.target.value,
                   }));
-                  setBuiltRequest(null);
+                  setPreparation({ phase: "draft" });
                 }}
                 placeholder="G..."
                 className={inputClass}
@@ -205,11 +211,7 @@ export function TransactionBuilder() {
         </div>
       </div>
 
-      <TransactionPreview
-        preview={preview}
-        request={builtRequest}
-        attempted={attempted}
-      />
+      <TransactionPreview preview={preview} />
     </div>
   );
 }

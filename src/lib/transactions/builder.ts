@@ -3,14 +3,16 @@ import type {
   ParameterSpec,
   StellarComponent,
 } from "@/data/components";
+import { networkLabel } from "@/lib/transactions/networks";
 import type {
   TransactionBuilderState,
+  TransactionPreparation,
+  TransactionPreparationPhase,
   TransactionPreviewData,
-  TransactionPreviewStatus,
   TransactionRequest,
   TransactionValidation,
 } from "@/lib/transactions/types";
-import { TRANSACTION_NETWORKS } from "@/lib/transactions/types";
+import { validateTransactionRequest } from "@/lib/transactions/validate";
 
 export function callableMethods(
   component: StellarComponent,
@@ -79,45 +81,6 @@ export function initialBuilderState(
   };
 }
 
-export function validateBuilderState(
-  state: TransactionBuilderState,
-  components: StellarComponent[],
-): TransactionValidation {
-  const component = components.find(
-    (candidate) => candidate.slug === state.componentSlug,
-  );
-
-  if (!component) {
-    return {
-      errors: { component: "Select a component." },
-      canBuild: false,
-    };
-  }
-
-  const method = callableMethods(component).find(
-    (fn) => fn.name === state.methodName,
-  );
-
-  if (!method) {
-    return {
-      errors: { method: "Select a method." },
-      canBuild: false,
-    };
-  }
-
-  const errors: Record<string, string> = {};
-  for (const param of method.params) {
-    if (!state.parameters[param.name]?.trim()) {
-      errors[param.name] = "This field is required.";
-    }
-  }
-
-  return {
-    errors,
-    canBuild: Object.keys(errors).length === 0,
-  };
-}
-
 export function buildTransactionRequest(
   state: TransactionBuilderState,
 ): TransactionRequest {
@@ -130,20 +93,45 @@ export function buildTransactionRequest(
   };
 }
 
-function previewStatus(
+export function validateBuilderState(
   state: TransactionBuilderState,
   components: StellarComponent[],
-  built: boolean,
-): TransactionPreviewStatus {
-  const validation = validateBuilderState(state, components);
-  if (built && validation.canBuild) return "built";
-  return validation.canBuild ? "ready" : "incomplete";
+): TransactionValidation {
+  const validation = validateTransactionRequest(
+    buildTransactionRequest(state),
+    components,
+  );
+
+  return {
+    errors: Object.fromEntries(
+      validation.errors.map((error) => [error.field, error.message]),
+    ),
+    canBuild: validation.ok,
+  };
+}
+
+function previewStatusLabel(
+  phase: TransactionPreparationPhase,
+  validationOk: boolean,
+): string {
+  switch (phase) {
+    case "draft":
+      return validationOk ? "Ready to build" : "Waiting for required parameters";
+    case "built":
+      return "Ready for preparation";
+    case "preparing":
+      return "Preparing...";
+    case "prepared":
+      return "Prepared - ready for network preparation";
+    case "failed":
+      return "Validation failed";
+  }
 }
 
 export function buildPreview(
   state: TransactionBuilderState,
   components: StellarComponent[],
-  built: boolean,
+  preparation: TransactionPreparation,
 ): TransactionPreviewData {
   const component = components.find(
     (candidate) => candidate.slug === state.componentSlug,
@@ -151,18 +139,37 @@ export function buildPreview(
   const method = component
     ? callableMethods(component).find((fn) => fn.name === state.methodName)
     : undefined;
+  const request = buildTransactionRequest(state);
+  const validation = validateTransactionRequest(request, components);
+
+  const requestToShow =
+    preparation.phase === "draft"
+      ? null
+      : preparation.phase === "built" || preparation.phase === "preparing"
+        ? preparation.request
+        : preparation.result.request;
 
   return {
-    networkLabel:
-      TRANSACTION_NETWORKS.find((network) => network.value === state.network)
-        ?.label ?? state.network,
+    networkLabel: networkLabel(state.network),
     sourceAccount: state.sourceAccount || "Not connected",
     componentName: component?.name ?? "—",
     methodName: method?.name ?? "—",
     arguments: (method?.params ?? []).map((param) => ({
       name: param.name,
+      type: param.type,
       value: state.parameters[param.name] ?? "",
     })),
-    status: previewStatus(state, components, built),
+    phase: preparation.phase,
+    statusLabel: previewStatusLabel(preparation.phase, validation.ok),
+    errors: validation.errors,
+    request: requestToShow,
+    preparedAt:
+      preparation.phase === "prepared"
+        ? preparation.result.metadata.preparedAt
+        : undefined,
+    networkConnected:
+      preparation.phase === "prepared"
+        ? preparation.result.metadata.networkConnected
+        : undefined,
   };
 }

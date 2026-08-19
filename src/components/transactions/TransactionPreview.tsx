@@ -1,37 +1,22 @@
 import type {
+  TransactionPreparationPhase,
   TransactionPreviewData,
-  TransactionRequest,
 } from "@/lib/transactions/types";
 import { Card } from "@/components/ui/Card";
 
-const statusLabels: Record<TransactionPreviewData["status"], string> = {
-  ready: "Ready to build",
-  incomplete: "Waiting for required parameters",
-  built: "Built — local transaction request",
-};
-
-const statusClasses: Record<TransactionPreviewData["status"], string> = {
-  ready: "text-accent-stellar",
-  incomplete: "text-accent-forge",
+const statusClasses: Record<TransactionPreparationPhase, string> = {
+  draft: "text-accent-stellar",
   built: "text-accent-stellar",
+  preparing: "text-accent-forge",
+  prepared: "text-accent-stellar",
+  failed: "text-accent-forge",
 };
 
 export interface TransactionPreviewProps {
   preview: TransactionPreviewData;
-  request: TransactionRequest | null;
-  attempted: boolean;
 }
 
-export function TransactionPreview({
-  preview,
-  request,
-  attempted,
-}: TransactionPreviewProps) {
-  const statusLabel =
-    preview.status === "incomplete" && attempted
-      ? "Cannot build — fill the highlighted required fields"
-      : statusLabels[preview.status];
-
+export function TransactionPreview({ preview }: TransactionPreviewProps) {
   return (
     <Card className="h-fit">
       <div className="flex items-center justify-between gap-3">
@@ -40,9 +25,9 @@ export function TransactionPreview({
         </h2>
 
         <span
-          className={`rounded-default border border-border px-2 py-0.5 font-mono text-[11px] ${statusClasses[preview.status]}`}
+          className={`rounded-default border border-border px-2 py-0.5 font-mono text-[11px] ${statusClasses[preview.phase]}`}
         >
-          {statusLabel}
+          {preview.statusLabel}
         </span>
       </div>
 
@@ -88,10 +73,35 @@ export function TransactionPreview({
               >
                 <span className="font-mono text-xs text-text-secondary">
                   {argument.name}
+                  <span className="text-text-secondary/70"> ({argument.type})</span>
                 </span>
 
                 <span className="max-w-[55%] truncate font-mono text-xs text-text-primary">
                   {argument.value || "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {preview.errors.length > 0 && preview.phase !== "draft" && (
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="font-sans text-sm text-text-secondary">
+            Validation errors
+          </p>
+
+          <ul className="mt-3 space-y-2">
+            {preview.errors.map((error) => (
+              <li
+                key={error.field}
+                className="flex flex-col gap-1 rounded-default border border-border bg-canvas/60 p-2"
+              >
+                <span className="font-mono text-[11px] text-accent-forge">
+                  {error.code}
+                </span>
+                <span className="font-sans text-xs text-text-primary">
+                  {error.message}
                 </span>
               </li>
             ))}
@@ -104,18 +114,36 @@ export function TransactionPreview({
 
         <p
           aria-live="polite"
-          className={`mt-1 font-mono text-xs ${statusClasses[preview.status]}`}
+          className={`mt-1 font-mono text-xs ${statusClasses[preview.phase]}`}
         >
-          {statusLabel}
+          {preview.statusLabel}
         </p>
+
+        {preview.phase === "prepared" && (
+          <>
+            {preview.networkConnected === false && (
+              <p className="mt-2 font-sans text-xs leading-relaxed text-text-secondary">
+                Network preparation not connected - nothing has been simulated,
+                signed, or submitted on-chain.
+              </p>
+            )}
+            {preview.preparedAt && (
+              <p className="mt-1 font-mono text-[11px] text-text-secondary">
+                Prepared locally at {preview.preparedAt}
+              </p>
+            )}
+          </>
+        )}
       </div>
 
-      {request && (
+      {preview.request && (
         <div className="mt-5">
-          <p className="font-sans text-sm text-text-primary">Built request</p>
+          <p className="font-sans text-sm text-text-primary">
+            Transaction request
+          </p>
 
           <pre className="mt-2 overflow-x-auto rounded-default border border-border bg-canvas/60 p-3 font-mono text-xs leading-relaxed text-text-secondary">
-            <code>{JSON.stringify(request, null, 2)}</code>
+            <code>{JSON.stringify(preview.request, null, 2)}</code>
           </pre>
         </div>
       )}
