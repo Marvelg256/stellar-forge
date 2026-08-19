@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
 
 const navLinks = [
   { href: "/components", label: "Components" },
@@ -39,9 +38,12 @@ export function Navbar() {
           </a>
         </nav>
 
-        <Button variant="primary" className="text-sm">
+        <Link
+          href="/docs"
+          className="rounded-default bg-accent-forge px-4 py-2 font-sans text-sm font-medium text-canvas transition-colors duration-150 ease-out hover:bg-accent-forge/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar focus-visible:ring-offset-2 focus-visible:ring-offset-canvas motion-reduce:transition-none"
+        >
           Get Started
-        </Button>
+        </Link>
       </div>
     </header>
   );

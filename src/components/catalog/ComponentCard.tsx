@@ -7,6 +7,7 @@ export interface ComponentCardProps {
   category: string;
   status?: string;
   href: string;
+  cta?: string;
 }
 
 export function ComponentCard({
@@ -15,6 +16,7 @@ export function ComponentCard({
   category,
   status = "Concept",
   href,
+  cta = "View component",
 }: ComponentCardProps) {
   return (
     <Link href={href} className="group block h-full focus-visible:outline-none">
@@ -39,7 +41,7 @@ export function ComponentCard({
         </div>
 
         <span className="mt-6 inline-flex items-center gap-1 font-mono text-xs text-text-secondary group-hover:text-accent-stellar">
-          View component
+          {cta}
           <span aria-hidden="true">→</span>
         </span>
       </Card>
