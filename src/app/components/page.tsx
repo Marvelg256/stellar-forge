@@ -22,6 +22,7 @@ export default function ComponentsPage() {
       const matchesSearch =
         query.length === 0 ||
         component.name.toLowerCase().includes(query) ||
+        component.shortDescription.toLowerCase().includes(query) ||
         component.description.toLowerCase().includes(query) ||
         component.category.toLowerCase().includes(query);
 
