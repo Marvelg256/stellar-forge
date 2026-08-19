@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import type { PlaygroundApiError, PlaygroundResponse } from "@/lib/playground/types";
 
 export const runtime = "nodejs";
 
@@ -66,12 +67,6 @@ interface ValidatedRequest {
   identities?: Record<string, string>;
   constructor: Record<string, unknown>;
   calls: Record<string, unknown>[];
-}
-
-interface ApiError {
-  kind: "input" | "runner" | "api";
-  message: string;
-  status: number;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -140,7 +135,7 @@ export async function POST(request: Request): Promise<Response> {
       parsed !== null &&
       (parsed as { ok?: unknown }).ok === false
     ) {
-      return Response.json(parsed, { status: 502 });
+      return Response.json(parsed as PlaygroundResponse, { status: 502 });
     }
     return apiErrorResponse({
       kind: "runner",
@@ -160,7 +155,7 @@ export async function POST(request: Request): Promise<Response> {
 
 function validateRequest(
   body: unknown,
-): { value: ValidatedRequest } | { error: ApiError } {
+): { value: ValidatedRequest } | { error: PlaygroundApiError } {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return { error: inputError("request body must be a JSON object") };
   }
@@ -208,7 +203,7 @@ function validateRequest(
 
 function validateIdentities(
   value: unknown,
-): { value: Record<string, string> } | { error: ApiError } {
+): { value: Record<string, string> } | { error: PlaygroundApiError } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { error: inputError("identities must be an object mapping names to strkeys") };
   }
@@ -232,7 +227,7 @@ function validateIdentities(
 function validateConstructor(
   value: unknown,
   knownNames: Set<string>,
-): { value: Record<string, unknown> } | { error: ApiError } {
+): { value: Record<string, unknown> } | { error: PlaygroundApiError } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { error: inputError("constructor must be an object") };
   }
@@ -259,7 +254,7 @@ function validateConstructor(
 function validateCall(
   value: unknown,
   knownNames: Set<string>,
-): { value: Record<string, unknown> } | { error: ApiError } {
+): { value: Record<string, unknown> } | { error: PlaygroundApiError } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { error: inputError("each call must be an object") };
   }
@@ -415,13 +410,14 @@ function parseRunnerStdout(stdout: string): unknown {
   }
 }
 
-function inputError(message: string): ApiError {
+function inputError(message: string): PlaygroundApiError {
   return { kind: "input", message, status: 400 };
 }
 
-function apiErrorResponse(error: ApiError): Response {
-  return Response.json(
-    { ok: false, error: { kind: error.kind, message: error.message } },
-    { status: error.status },
-  );
+function apiErrorResponse(error: PlaygroundApiError): Response {
+  const body: PlaygroundResponse = {
+    ok: false,
+    error: { kind: error.kind, message: error.message },
+  };
+  return Response.json(body, { status: error.status });
 }
