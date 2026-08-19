@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { SandboxPanel } from "@/components/playground/SandboxPanel";
 import {
   getConfigDefaults,
   stellarComponents,
@@ -224,6 +225,15 @@ export default function PlaygroundPage() {
                 </Button>
               </div>
             </Card>
+
+            {selectedComponent.status === "Implemented" &&
+            (selectedComponent.interface?.length ?? 0) > 0 ? (
+              <SandboxPanel
+                key={selectedSlug}
+                component={selectedComponent}
+                configValues={configValues}
+              />
+            ) : null}
 
             <Card className="font-mono text-xs">
               <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
