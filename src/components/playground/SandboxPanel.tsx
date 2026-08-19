@@ -18,6 +18,11 @@ const SIGNER_REQUIRED_OPS = new Set([
   "mint",
   "set_admin",
 ]);
+const INTEGER_PATTERN = /^-?\d+$/;
+const DECIMAL_PATTERN = /^\d+$/;
+const I128_MIN = BigInt("-170141183460469231731687303715884105728");
+const I128_MAX = BigInt("170141183460469231731687303715884105727");
+const U32_MAX = BigInt("4294967295");
 
 type StepStatus =
   | "pending"
@@ -122,6 +127,25 @@ function formatError(error: StepError): string {
   return `${error.kind} error — ${error.message ?? "no details"}`;
 }
 
+function validateParamValue(
+  param: FunctionSpec["params"][number],
+  value: string,
+): string | null {
+  if (value.trim().length === 0) return null;
+  if (param.type === "i128") {
+    if (!INTEGER_PATTERN.test(value)) return "must be an integer";
+    const n = BigInt(value);
+    if (n < I128_MIN || n > I128_MAX) return "outside the i128 range";
+    return null;
+  }
+  if (param.type === "u32") {
+    if (!DECIMAL_PATTERN.test(value)) return "must be a whole number";
+    if (BigInt(value) > U32_MAX) return "outside the u32 range";
+    return null;
+  }
+  return null;
+}
+
 export function SandboxPanel({
   component,
   configValues,
@@ -142,14 +166,25 @@ export function SandboxPanel({
       ]),
     ),
   );
+  const [initializing, setInitializing] = useState(false);
   const [running, setRunning] = useState(false);
   const [deployedContract, setDeployedContract] = useState<string | null>(null);
 
   if (ops.length === 0) return null;
 
+  const busy = initializing || running;
   const selectedOp = ops.find((op) => op.name === opName) ?? ops[0];
   const args = selectedOp.params.map((param) => argValues[param.name] ?? "");
   const hasEmptyArgs = args.some((value) => value.trim().length === 0);
+  const argErrors = Object.fromEntries(
+    selectedOp.params.map((param) => [
+      param.name,
+      validateParamValue(param, argValues[param.name] ?? ""),
+    ]),
+  );
+  const hasInvalidArgs = Object.values(argErrors).some(
+    (message) => message !== null,
+  );
   const signer = signerFor(selectedOp, args);
 
   function changeOp(name: string) {
@@ -232,8 +267,8 @@ export function SandboxPanel({
   }
 
   async function initialize() {
-    if (running) return;
-    setRunning(true);
+    if (busy) return;
+    setInitializing(true);
     const step: Step = {
       id: nextStepId++,
       fn: "__constructor",
@@ -263,12 +298,12 @@ export function SandboxPanel({
         ),
       );
     } finally {
-      setRunning(false);
+      setInitializing(false);
     }
   }
 
   async function execute() {
-    if (running || hasEmptyArgs) return;
+    if (busy || hasEmptyArgs || hasInvalidArgs) return;
     setRunning(true);
     const step: Step = {
       id: nextStepId++,
@@ -319,7 +354,7 @@ export function SandboxPanel({
           onChange={(event) =>
             setArgValues({ ...argValues, [param.name]: event.target.value })
           }
-          disabled={running}
+          disabled={busy}
           className={inputStyles}
         >
           {IDENTITY_OPTIONS.map((identity) => (
@@ -340,7 +375,8 @@ export function SandboxPanel({
           setArgValues({ ...argValues, [param.name]: event.target.value })
         }
         placeholder={param.type === "u32" ? "expiration ledger" : "amount"}
-        disabled={running}
+        disabled={busy}
+        aria-invalid={argErrors[param.name] !== null}
         className={inputStyles}
       />
     );
@@ -383,14 +419,14 @@ export function SandboxPanel({
       </div>
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <Button variant="primary" onClick={initialize} disabled={running}>
-          Initialize {component.name}
+        <Button variant="primary" onClick={initialize} disabled={busy}>
+          {initializing ? "Initializing…" : `Initialize ${component.name}`}
         </Button>
 
         <Button
           variant="secondary"
           onClick={resetSandbox}
-          disabled={running || steps.length === 0}
+          disabled={busy || steps.length === 0}
         >
           Reset Sandbox
         </Button>
@@ -410,7 +446,7 @@ export function SandboxPanel({
             <select
               value={opName}
               onChange={(event) => changeOp(event.target.value)}
-              disabled={running}
+              disabled={busy}
               className="mt-2 w-full rounded-default border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar disabled:cursor-not-allowed disabled:opacity-50"
             >
               {ops.map((op) => (
@@ -431,17 +467,29 @@ export function SandboxPanel({
               </span>
 
               {renderParamInput(param)}
+
+              {argErrors[param.name] && (
+                <span className="mt-1 block font-mono text-xs text-accent-forge">
+                  {argErrors[param.name]}
+                </span>
+              )}
             </label>
           ))}
 
           <Button
             variant="primary"
             onClick={execute}
-            disabled={running || hasEmptyArgs}
+            disabled={busy || hasEmptyArgs || hasInvalidArgs}
           >
             {running ? "Executing…" : "Execute"}
           </Button>
         </div>
+
+        {selectedOp.description && (
+          <p className="mt-2 max-w-2xl font-sans text-xs leading-relaxed text-text-secondary">
+            {selectedOp.description}
+          </p>
+        )}
 
         <p className="mt-2 font-sans text-xs text-text-secondary">
           {signer
@@ -460,40 +508,48 @@ export function SandboxPanel({
             No operations executed yet. Initialize the contract to begin.
           </p>
         ) : (
-          <ul className="mt-3 space-y-2">
-            {steps.map((step) => (
-              <li
-                key={step.id}
-                className="rounded-default border border-border px-3 py-2"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-text-primary">
-                    {step.label}
-                  </span>
+          <ul className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+            {steps.map((step, index) => {
+              const isNewest = index === steps.length - 1;
 
-                  <span
-                    className={`rounded-default border px-2 py-0.5 font-mono text-xs ${STATUS_STYLES[step.status]}`}
-                  >
-                    {STATUS_LABELS[step.status]}
-                  </span>
-                </div>
-
-                {step.status === "ok" && step.result !== undefined && (
-                  <p className="mt-1 font-mono text-xs text-text-secondary">
-                    {step.fn === "__constructor" ? "deployed at" : "returned"}{" "}
-                    <span className="text-text-primary">
-                      {formatResult(step.result)}
+              return (
+                <li
+                  key={step.id}
+                  className={`rounded-default border px-3 py-2 ${
+                    isNewest ? "border-accent-stellar/60" : "border-border"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-xs text-text-primary">
+                      {step.label}
                     </span>
-                  </p>
-                )}
 
-                {step.error && (
-                  <p className="mt-1 font-mono text-xs text-accent-forge">
-                    {formatError(step.error)}
-                  </p>
-                )}
-              </li>
-            ))}
+                    <span
+                      className={`rounded-default border px-2 py-0.5 font-mono text-xs ${STATUS_STYLES[step.status]} ${
+                        step.status === "pending" ? "animate-pulse" : ""
+                      }`}
+                    >
+                      {STATUS_LABELS[step.status]}
+                    </span>
+                  </div>
+
+                  {step.status === "ok" && step.result !== undefined && (
+                    <p className="mt-1 font-mono text-xs text-text-secondary">
+                      {step.fn === "__constructor" ? "deployed at" : "returned"}{" "}
+                      <span className="text-text-primary">
+                        {formatResult(step.result)}
+                      </span>
+                    </p>
+                  )}
+
+                  {step.error && (
+                    <p className="mt-1 font-mono text-xs text-accent-forge">
+                      {formatError(step.error)}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

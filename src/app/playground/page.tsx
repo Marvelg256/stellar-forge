@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SandboxPanel } from "@/components/playground/SandboxPanel";
@@ -10,6 +10,17 @@ import {
   type ConfigField,
   type StellarComponent,
 } from "@/data/components";
+
+function subscribeToUrl(callback: () => void): () => void {
+  window.addEventListener("popstate", callback);
+  return () => window.removeEventListener("popstate", callback);
+}
+
+function getUrlComponentSlug(): string | null {
+  return new URLSearchParams(window.location.search).get("component");
+}
+
+const getServerUrlComponentSlug = () => null;
 
 function buildGeneratedCode(
   component: StellarComponent,
@@ -53,26 +64,39 @@ function buildGeneratedCode(
 }
 
 export default function PlaygroundPage() {
-  const [selectedSlug, setSelectedSlug] = useState<string>("token");
-  const [configValues, setConfigValues] = useState<Record<string, string>>(
-    () => getConfigDefaults(stellarComponents[0]),
-  );
-  const [generatedCode, setGeneratedCode] = useState(() =>
-    buildGeneratedCode(stellarComponents[0], getConfigDefaults(stellarComponents[0])),
+  const urlSlug = useSyncExternalStore(
+    subscribeToUrl,
+    getUrlComponentSlug,
+    getServerUrlComponentSlug,
   );
 
   const selectedComponent =
-    stellarComponents.find((component) => component.slug === selectedSlug) ??
+    stellarComponents.find((component) => component.slug === urlSlug) ??
     stellarComponents[0];
+  const selectedSlug = selectedComponent.slug;
+
+  const [previousSlug, setPreviousSlug] = useState(selectedSlug);
+  const [configValues, setConfigValues] = useState<Record<string, string>>(
+    () => getConfigDefaults(selectedComponent),
+  );
+  const [generatedCode, setGeneratedCode] = useState(() =>
+    buildGeneratedCode(selectedComponent, getConfigDefaults(selectedComponent)),
+  );
+
+  if (previousSlug !== selectedSlug) {
+    setPreviousSlug(selectedSlug);
+    const defaults = getConfigDefaults(selectedComponent);
+    setConfigValues(defaults);
+    setGeneratedCode(buildGeneratedCode(selectedComponent, defaults));
+  }
 
   function selectComponent(slug: string) {
-    const component = stellarComponents.find((c) => c.slug === slug);
-    if (!component) return;
-
-    const defaults = getConfigDefaults(component);
-    setSelectedSlug(slug);
-    setConfigValues(defaults);
-    setGeneratedCode(buildGeneratedCode(component, defaults));
+    if (!stellarComponents.some((component) => component.slug === slug)) return;
+    window.history.replaceState(
+      null,
+      "",
+      `/playground?component=${encodeURIComponent(slug)}`,
+    );
   }
 
   function updateConfigValue(key: string, value: string) {

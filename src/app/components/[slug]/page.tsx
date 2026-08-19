@@ -211,13 +211,14 @@ export default async function ComponentDetailPage({
                 </h2>
 
                 <p className="mt-2 max-w-xl font-sans text-sm leading-relaxed text-text-secondary">
-                  Open the playground to configure the pattern and inspect its
-                  generated structure before integrating it into a project.
+                  {component.status === "Implemented"
+                    ? "Open the playground with this component preselected, execute it locally in the sandbox, and inspect its generated structure before integrating it into a project."
+                    : "Open the playground with this pattern preselected to configure it and inspect its generated structure before integrating it into a project."}
                 </p>
               </div>
 
               <Link
-                href="/playground"
+                href={`/playground?component=${encodeURIComponent(component.slug)}`}
                 className="rounded-default border border-accent-stellar px-4 py-2 font-mono text-xs text-accent-stellar transition-colors hover:bg-accent-stellar/10"
               >
                 Open Playground →
