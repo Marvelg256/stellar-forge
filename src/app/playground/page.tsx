@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { IntegrationPanel } from "@/components/integration/IntegrationPanel";
 import { SandboxPanel } from "@/components/playground/SandboxPanel";
 import {
   getConfigDefaults,
@@ -275,6 +276,11 @@ export default function PlaygroundPage() {
                 <code>{generatedCode}</code>
               </pre>
             </Card>
+
+            <IntegrationPanel
+              component={selectedComponent}
+              configValues={configValues}
+            />
           </div>
         </div>
       </section>
