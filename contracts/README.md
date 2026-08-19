@@ -76,3 +76,27 @@ cargo fmt --all
 ```
 
 The resulting WASM is written to `target/wasm32v1-none/release/`.
+
+## Testnet Deployment
+
+The `token` contract is deployed to Stellar Testnet. Deployment uses the
+Stellar CLI only; no credentials live in this repository.
+
+One-time identity setup (stored in the CLI config directory, outside this
+repo):
+
+```bash
+stellar keys generate deployer --fund --network testnet
+```
+
+Deploy (builds, then creates a new token contract instance with decimals 7,
+name "Forge Token", symbol "FORGE", admin = deployer):
+
+```bash
+make -C contracts/contracts/token deploy-testnet
+```
+
+The command prints the new contract id (`C...`). Register it in
+`src/lib/transactions/deployments.ts` under `testnet` / `token` (the registry
+validates contract ids before they are used). Re-running the target deploys a
+fresh instance with a new id.
