@@ -68,6 +68,11 @@ export function DocsSidebar() {
         label="Playground"
         active={pathname.startsWith("/playground")}
       />
+      <NavItem
+        href="/transactions"
+        label="Transaction Builder"
+        active={pathname.startsWith("/transactions")}
+      />
       <NavItem href="/docs#integration" label="Integration" active={false} />
     </>
   );

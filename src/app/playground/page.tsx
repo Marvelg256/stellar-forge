@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { IntegrationPanel } from "@/components/integration/IntegrationPanel";
@@ -169,6 +170,13 @@ export default function PlaygroundPage() {
             Configure a reusable Soroban component, inspect its inputs and
             generated structure, then take the pattern into your own project.
           </p>
+
+          <Link
+            href="/transactions"
+            className="mt-4 inline-flex font-mono text-xs text-accent-stellar hover:underline"
+          >
+            Build a transaction request →
+          </Link>
         </div>
 
         <div className="mt-10 grid gap-6 lg:grid-cols-[280px_1fr]">
