@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
@@ -23,8 +24,13 @@ export default function Home() {
             </p>
 
             <div className="mt-9 flex flex-wrap items-center gap-4">
-              <Button variant="primary">Explore Components</Button>
-              <Button variant="secondary">Open Playground</Button>
+              <Link href="/components">
+                <Button variant="primary">Explore Components</Button>
+              </Link>
+
+              <Link href="/playground">
+                <Button variant="secondary">Open Playground</Button>
+              </Link>
             </div>
 
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-text-secondary">
