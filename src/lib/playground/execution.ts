@@ -1,4 +1,4 @@
-import type { FunctionSpec } from "@/data/components";
+import type { FunctionSpec, StellarComponent } from "@/data/components";
 import type {
   CallRequest,
   ConstructorRequest,
@@ -11,17 +11,6 @@ import type {
 export const ADMIN_IDENTITY = "admin";
 export const IDENTITY_OPTIONS = ["admin", "user1", "user2"] as const;
 export const ADDRESS_TYPES = new Set(["Address", "MuxedAddress"]);
-
-const ADMIN_ONLY_OPS = new Set(["mint", "set_admin"]);
-const SIGNER_REQUIRED_OPS = new Set([
-  "transfer",
-  "approve",
-  "transfer_from",
-  "burn",
-  "burn_from",
-  "mint",
-  "set_admin",
-]);
 
 export function defaultArgValue(
   param: FunctionSpec["params"][number],
@@ -38,10 +27,12 @@ export function signerFor(
   fn: FunctionSpec,
   args: string[],
 ): string | undefined {
-  if (!SIGNER_REQUIRED_OPS.has(fn.name)) return undefined;
-  if (ADMIN_ONLY_OPS.has(fn.name)) return ADMIN_IDENTITY;
-  const index = fn.params.findIndex((param) => ADDRESS_TYPES.has(param.type));
-  return index >= 0 ? args[index] : undefined;
+  if (fn.authorization === "admin") return ADMIN_IDENTITY;
+  if (fn.authorization === "first-address") {
+    const index = fn.params.findIndex((param) => ADDRESS_TYPES.has(param.type));
+    return index >= 0 ? args[index] : undefined;
+  }
+  return undefined;
 }
 
 export function callRequestFor(fn: FunctionSpec, args: string[]): CallRequest {
@@ -52,14 +43,38 @@ export function callRequestFor(fn: FunctionSpec, args: string[]): CallRequest {
 }
 
 export function buildConstructorRequest(
+  component: StellarComponent,
   configValues: Record<string, string>,
 ): ConstructorRequest {
-  return {
-    admin: ADMIN_IDENTITY,
-    decimal: configValues.decimals,
-    name: configValues.name,
-    symbol: configValues.symbol,
-  };
+  const constructor = (component.interface ?? []).find(
+    (fn) => fn.name === "__constructor",
+  );
+  const args: ConstructorRequest = {};
+  if (!constructor) return args;
+  for (const param of constructor.params) {
+    if (ADDRESS_TYPES.has(param.type)) {
+      args[param.name] = ADMIN_IDENTITY;
+    } else {
+      args[param.name] = configValueForParam(param.name, configValues);
+    }
+  }
+  return args;
+}
+
+function configValueForParam(
+  paramName: string,
+  configValues: Record<string, string>,
+): string {
+  const candidates = [
+    paramName,
+    paramName.toLowerCase(),
+    paramName.replace(/s$/, ""),
+    `${paramName}s`,
+  ];
+  return (
+    candidates.map((key) => configValues[key]).find((value) => value !== undefined) ??
+    ""
+  );
 }
 
 export function callsForSteps(

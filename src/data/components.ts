@@ -5,13 +5,17 @@ export type ConfigFieldType = "text" | "number" | "select";
 export interface ParameterSpec {
   name: string;
   type: string;
+  placeholder?: string;
 }
+
+export type FunctionAuthorization = "none" | "admin" | "first-address";
 
 export interface FunctionSpec {
   name: string;
   params: ParameterSpec[];
   returns?: string;
   description?: string;
+  authorization?: FunctionAuthorization;
 }
 
 export interface ConfigOption {
@@ -123,6 +127,7 @@ export const stellarComponents: StellarComponent[] = [
           { name: "name", type: "String" },
           { name: "symbol", type: "String" },
         ],
+        authorization: "none",
         description:
           "Deploys and initializes the token. Called automatically on deploy.",
       },
@@ -130,18 +135,21 @@ export const stellarComponents: StellarComponent[] = [
         name: "name",
         params: [],
         returns: "String",
+        authorization: "none",
         description: "Returns the token name.",
       },
       {
         name: "symbol",
         params: [],
         returns: "String",
+        authorization: "none",
         description: "Returns the token symbol.",
       },
       {
         name: "decimals",
         params: [],
         returns: "u32",
+        authorization: "none",
         description:
           "Returns the number of decimals used to represent token amounts.",
       },
@@ -149,6 +157,7 @@ export const stellarComponents: StellarComponent[] = [
         name: "balance",
         params: [{ name: "id", type: "Address" }],
         returns: "i128",
+        authorization: "none",
         description: "Returns the balance of id, or 0 when unset.",
       },
       {
@@ -158,6 +167,7 @@ export const stellarComponents: StellarComponent[] = [
           { name: "to_muxed", type: "MuxedAddress" },
           { name: "amount", type: "i128" },
         ],
+        authorization: "first-address",
         description: "Transfers amount from from to to_muxed, authorized by from.",
       },
       {
@@ -167,6 +177,7 @@ export const stellarComponents: StellarComponent[] = [
           { name: "spender", type: "Address" },
         ],
         returns: "i128",
+        authorization: "none",
         description:
           "Returns the amount spender is allowed to transfer out of from's balance.",
       },
@@ -178,6 +189,7 @@ export const stellarComponents: StellarComponent[] = [
           { name: "amount", type: "i128" },
           { name: "expiration_ledger", type: "u32" },
         ],
+        authorization: "first-address",
         description:
           "Sets the allowance spender may transfer from from's balance until expiration_ledger.",
       },
@@ -189,6 +201,7 @@ export const stellarComponents: StellarComponent[] = [
           { name: "to", type: "Address" },
           { name: "amount", type: "i128" },
         ],
+        authorization: "first-address",
         description:
           "Transfers amount from from to to, consuming spender's allowance. Authorized by spender.",
       },
@@ -198,6 +211,7 @@ export const stellarComponents: StellarComponent[] = [
           { name: "from", type: "Address" },
           { name: "amount", type: "i128" },
         ],
+        authorization: "first-address",
         description: "Burns amount from from's balance. Authorized by from.",
       },
       {
@@ -207,6 +221,7 @@ export const stellarComponents: StellarComponent[] = [
           { name: "from", type: "Address" },
           { name: "amount", type: "i128" },
         ],
+        authorization: "first-address",
         description:
           "Burns amount from from's balance, consuming spender's allowance. Authorized by spender.",
       },
@@ -216,11 +231,13 @@ export const stellarComponents: StellarComponent[] = [
           { name: "to", type: "Address" },
           { name: "amount", type: "i128" },
         ],
+        authorization: "admin",
         description: "Mints amount to to. Admin-only.",
       },
       {
         name: "set_admin",
         params: [{ name: "new_admin", type: "Address" }],
+        authorization: "admin",
         description: "Sets the contract admin to new_admin. Admin-only.",
       },
     ],
@@ -400,4 +417,13 @@ export function getConfigDefaults(
   return Object.fromEntries(
     (component.config ?? []).map((field) => [field.key, field.default]),
   );
+}
+
+export function componentWasmPath(
+  component: StellarComponent,
+): string | null {
+  const implementation = component.implementation;
+  if (!implementation) return null;
+  const packageName = implementation.package.replace(/-/g, "_");
+  return `contracts/target/${implementation.buildTarget}/release/${packageName}.wasm`;
 }

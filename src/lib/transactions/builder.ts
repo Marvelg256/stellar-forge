@@ -42,6 +42,7 @@ export function emptyParameters(
 }
 
 export function parameterPlaceholder(param: ParameterSpec): string {
+  if (param.placeholder !== undefined) return param.placeholder;
   switch (param.type) {
     case "Address":
     case "MuxedAddress":
@@ -51,9 +52,9 @@ export function parameterPlaceholder(param: ParameterSpec): string {
     case "u32":
       return "200";
     case "String":
-      return "Forge Token";
+      return "text";
     case "Symbol":
-      return "FORGE";
+      return "symbol";
     default:
       return "";
   }

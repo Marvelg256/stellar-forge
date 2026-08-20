@@ -40,12 +40,7 @@ export interface ExecutionStep {
   error?: ExecutionError;
 }
 
-export interface ConstructorRequest {
-  admin: string;
-  decimal: string;
-  name: string;
-  symbol: string;
-}
+export type ConstructorRequest = Record<string, unknown>;
 
 export interface CallRequest {
   fn: string;
@@ -54,6 +49,7 @@ export interface CallRequest {
 }
 
 export interface PlaygroundRequest {
+  componentSlug: string;
   constructor: ConstructorRequest;
   calls: CallRequest[];
   identities?: Record<string, string>;

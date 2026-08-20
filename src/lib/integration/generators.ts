@@ -29,7 +29,9 @@ export function generateRustIntegration({
   const constructor = interfaceFns.find((fn) => fn.name === "__constructor");
   const callableFns = interfaceFns.filter((fn) => fn.name !== "__constructor");
   const packageName = implementation.package;
-  const clientName = `${component.name}Client`;
+  const packageIdentifier = snakeCase(packageName);
+  const clientName = `${pascalCase(packageName)}Client`;
+  const clientVar = snakeCase(clientName);
 
   const paramTypes = new Set(
     interfaceFns.flatMap((fn) => fn.params.map((param) => param.type)),
@@ -91,7 +93,7 @@ export function generateRustIntegration({
   lines.push(`    ${sdkImports.join(", ")},`);
   lines.push("};");
   lines.push("");
-  lines.push(`use ${packageName}::${clientName};`);
+  lines.push(`use ${packageIdentifier}::${clientName};`);
   lines.push("");
 
   lines.push(
@@ -115,11 +117,11 @@ export function generateRustIntegration({
   lines.push(
     `    let wasm: Bytes = Bytes::from_slice(`,
     `        env,`,
-    `        &include_bytes!("../target/${implementation.buildTarget}/release/${packageName}.wasm")[..],`,
+    `        &include_bytes!("../target/${implementation.buildTarget}/release/${packageIdentifier}.wasm")[..],`,
     `    );`,
   );
   lines.push("    let wasm_hash = env.deployer().upload_contract_wasm(wasm);");
-  lines.push("    let token_address = env");
+  lines.push(`    let ${clientVar}_address = env`);
   lines.push("        .deployer()");
   lines.push("        .with_address(admin.clone(), [0u8; 32])");
   lines.push("        .deploy_v2(");
@@ -135,7 +137,7 @@ export function generateRustIntegration({
   lines.push("            ),");
   lines.push("        );");
   lines.push(
-    `    let ${snakeCase(clientName)} = ${clientName}::new(env, &token_address);`,
+    `    let ${clientVar} = ${clientName}::new(env, &${clientVar}_address);`,
   );
   lines.push("");
 
@@ -157,7 +159,7 @@ export function generateRustIntegration({
       lines.push(`    // ${fn.description}`);
     }
     const args = fn.params.map((param) => placeholderArg(param)).join(", ");
-    const call = `token.${fn.name}(${args})`;
+    const call = `${clientVar}.${fn.name}(${args})`;
     if (fn.returns) {
       lines.push(`    let ${fn.name}: ${fn.returns} = ${call};`);
     } else {
@@ -203,7 +205,16 @@ function constructorArg(
 function snakeCase(name: string): string {
   return name
     .replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+    .replace(/-/g, "_")
     .replace(/^_/, "");
+}
+
+function pascalCase(value: string): string {
+  return value
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
 }
 
 function placeholderArg(param: ParameterSpec): string {

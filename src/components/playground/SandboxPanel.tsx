@@ -143,10 +143,16 @@ export function SandboxPanel({
   async function initialize() {
     if (busy) return;
     setInitializing(true);
+    const constructorParams =
+      (component.interface ?? []).find((fn) => fn.name === "__constructor")
+        ?.params ?? [];
+    const initArgs = buildConstructorRequest(component, configValues);
     const step: ExecutionStep = {
       id: nextStepId++,
       fn: "__constructor",
-      label: `initialize(${configValues.name}, ${configValues.symbol}, ${configValues.decimals})`,
+      label: `initialize(${constructorParams
+        .map((param) => String(initArgs[param.name] ?? ""))
+        .join(", ")})`,
       args: [],
       status: "pending",
     };
@@ -154,7 +160,8 @@ export function SandboxPanel({
     setDeployedContract(null);
     try {
       const result = await postPlaygroundRequest({
-        constructor: buildConstructorRequest(configValues),
+        componentSlug: component.slug,
+        constructor: initArgs,
         calls: [],
       });
       if (result.ok) {
@@ -180,7 +187,8 @@ export function SandboxPanel({
     setSteps(submitted);
     try {
       const result = await postPlaygroundRequest({
-        constructor: buildConstructorRequest(configValues),
+        componentSlug: component.slug,
+        constructor: buildConstructorRequest(component, configValues),
         calls: callsForSteps(submitted, ops),
       });
       if (result.ok) {
@@ -228,7 +236,7 @@ export function SandboxPanel({
         onChange={(event) =>
           setArgValues({ ...argValues, [param.name]: event.target.value })
         }
-        placeholder={param.type === "u32" ? "expiration ledger" : "amount"}
+        placeholder={param.type === "u32" ? "whole number" : "amount"}
         disabled={busy}
         aria-invalid={argErrors[param.name] !== null}
         className={inputStyles}
@@ -267,7 +275,7 @@ export function SandboxPanel({
           </>
         ) : (
           <span className="text-text-secondary">
-            not initialized — initialize to deploy the token
+            not initialized — initialize to deploy {component.name}
           </span>
         )}
       </div>

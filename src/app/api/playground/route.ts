@@ -1,6 +1,13 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import {
+  componentWasmPath,
+  getComponentBySlug,
+  type FunctionSpec,
+  type ParameterSpec,
+  type StellarComponent,
+} from "@/data/components";
 import type { PlaygroundApiError, PlaygroundResponse } from "@/lib/playground/types";
 
 export const runtime = "nodejs";
@@ -9,6 +16,8 @@ const RUNNER_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_CALLS = 20;
 const MAX_IDENTITIES = 20;
+const MAX_STRING_LENGTH = 100;
+const MAX_SYMBOL_LENGTH = 32;
 
 const PROJECT_ROOT = process.cwd();
 const RUNNER_EXE = path.join(
@@ -17,14 +26,6 @@ const RUNNER_EXE = path.join(
   "target",
   "debug",
   "sandbox-runner.exe",
-);
-const TOKEN_WASM = path.join(
-  PROJECT_ROOT,
-  "contracts",
-  "target",
-  "wasm32v1-none",
-  "release",
-  "token.wasm",
 );
 
 const DEFAULT_IDENTITIES: ReadonlySet<string> = new Set([
@@ -41,29 +42,29 @@ const I128_MIN = BigInt("-170141183460469231731687303715884105728");
 const I128_MAX = BigInt("170141183460469231731687303715884105727");
 const U32_MAX = BigInt("4294967295");
 
-type ArgKind = "address" | "muxed" | "i128" | "u32";
+type ArgKind = "address" | "muxed" | "i128" | "u32" | "string" | "symbol";
 
-interface CallSpec {
-  args: readonly ArgKind[];
-  requiresSigner: boolean;
+function argKindForType(type: string): ArgKind | null {
+  switch (type) {
+    case "Address":
+      return "address";
+    case "MuxedAddress":
+      return "muxed";
+    case "i128":
+      return "i128";
+    case "u32":
+      return "u32";
+    case "String":
+      return "string";
+    case "Symbol":
+      return "symbol";
+    default:
+      return null;
+  }
 }
 
-const CALL_SPECS: Readonly<Record<string, CallSpec>> = {
-  name: { args: [], requiresSigner: false },
-  symbol: { args: [], requiresSigner: false },
-  decimals: { args: [], requiresSigner: false },
-  balance: { args: ["address"], requiresSigner: false },
-  allowance: { args: ["address", "address"], requiresSigner: false },
-  transfer: { args: ["address", "muxed", "i128"], requiresSigner: true },
-  approve: { args: ["address", "address", "i128", "u32"], requiresSigner: true },
-  transfer_from: { args: ["address", "address", "address", "i128"], requiresSigner: true },
-  burn: { args: ["address", "i128"], requiresSigner: true },
-  burn_from: { args: ["address", "address", "i128"], requiresSigner: true },
-  mint: { args: ["address", "i128"], requiresSigner: true },
-  set_admin: { args: ["address"], requiresSigner: true },
-};
-
 interface ValidatedRequest {
+  component: StellarComponent;
   identities?: Record<string, string>;
   constructor: Record<string, unknown>;
   calls: Record<string, unknown>[];
@@ -74,13 +75,6 @@ export async function POST(request: Request): Promise<Response> {
     return apiErrorResponse({
       kind: "api",
       message: `sandbox-runner executable not found at ${RUNNER_EXE}`,
-      status: 503,
-    });
-  }
-  if (!existsSync(TOKEN_WASM)) {
-    return apiErrorResponse({
-      kind: "api",
-      message: `token.wasm artifact not found at ${TOKEN_WASM}`,
       status: 503,
     });
   }
@@ -109,8 +103,18 @@ export async function POST(request: Request): Promise<Response> {
     return apiErrorResponse(validated.error);
   }
 
+  const component = validated.value.component;
+  const wasmPath = componentWasmPath(component);
+  if (!wasmPath || !existsSync(wasmPath)) {
+    return apiErrorResponse({
+      kind: "api",
+      message: `contract wasm artifact not found for component "${component.slug}" at ${wasmPath ?? "unknown path"}`,
+      status: 503,
+    });
+  }
+
   const runnerRequest = {
-    wasmPath: TOKEN_WASM,
+    wasmPath,
     ...(validated.value.identities !== undefined
       ? { identities: validated.value.identities }
       : {}),
@@ -164,6 +168,32 @@ function validateRequest(
     return { error: inputError("wasmPath is not accepted from the browser") };
   }
 
+  if (typeof request.componentSlug !== "string" || request.componentSlug.length === 0) {
+    return { error: inputError("request must include a componentSlug") };
+  }
+  const component = getComponentBySlug(request.componentSlug);
+  if (!component) {
+    return { error: inputError(`unknown component: ${request.componentSlug}`) };
+  }
+  if (!component.implementation) {
+    return {
+      error: inputError(`component ${component.slug} has no implementation metadata`),
+    };
+  }
+  const constructorFn = (component.interface ?? []).find(
+    (fn) => fn.name === "__constructor",
+  );
+  if (!constructorFn) {
+    return {
+      error: inputError(`component ${component.slug} has no constructor interface`),
+    };
+  }
+  const interfaceByName = new Map(
+    (component.interface ?? [])
+      .filter((fn) => fn.name !== "__constructor")
+      .map((fn) => [fn.name, fn] as const),
+  );
+
   let identities: Record<string, string> | undefined;
   if ("identities" in request) {
     const checked = validateIdentities(request.identities);
@@ -176,24 +206,31 @@ function validateRequest(
     for (const name of Object.keys(identities)) knownNames.add(name);
   }
 
-  const constructor = validateConstructor(request.constructor, knownNames);
+  const constructor = validateConstructor(
+    request.constructor,
+    constructorFn.params,
+    knownNames,
+  );
   if ("error" in constructor) return constructor;
 
   const calls = request.calls;
   if (!Array.isArray(calls) || calls.length > MAX_CALLS) {
     return {
-      error: inputError(`calls must be an array of 0 to ${MAX_CALLS} operations`),
+      error: inputError(
+        `calls must be an array of 0 to ${MAX_CALLS} operations`,
+      ),
     };
   }
   const checkedCalls: Record<string, unknown>[] = [];
   for (const call of calls) {
-    const checked = validateCall(call, knownNames);
+    const checked = validateCall(call, interfaceByName, knownNames);
     if ("error" in checked) return checked;
     checkedCalls.push(checked.value);
   }
 
   return {
     value: {
+      component,
       ...(identities !== undefined ? { identities } : {}),
       constructor: constructor.value,
       calls: checkedCalls,
@@ -205,11 +242,17 @@ function validateIdentities(
   value: unknown,
 ): { value: Record<string, string> } | { error: PlaygroundApiError } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { error: inputError("identities must be an object mapping names to strkeys") };
+    return {
+      error: inputError(
+        "identities must be an object mapping names to strkeys",
+      ),
+    };
   }
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.length > MAX_IDENTITIES) {
-    return { error: inputError(`identities exceeds ${MAX_IDENTITIES} entries`) };
+    return {
+      error: inputError(`identities exceeds ${MAX_IDENTITIES} entries`),
+    };
   }
   const result: Record<string, string> = {};
   for (const [name, key] of entries) {
@@ -226,33 +269,36 @@ function validateIdentities(
 
 function validateConstructor(
   value: unknown,
+  params: ParameterSpec[],
   knownNames: Set<string>,
 ): { value: Record<string, unknown> } | { error: PlaygroundApiError } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { error: inputError("constructor must be an object") };
   }
   const ctor = value as Record<string, unknown>;
-  if (!isAddressRef(ctor.admin, knownNames, false)) {
-    return {
-      error: inputError(
-        "constructor.admin must be a known identity or a G/C strkey",
-      ),
-    };
-  }
-  if (!isU32(ctor.decimal)) {
-    return { error: inputError("constructor.decimal must be a u32") };
-  }
-  if (!isBoundedString(ctor.name, 100)) {
-    return { error: inputError("constructor.name must be a non-empty string of at most 100 characters") };
-  }
-  if (!isBoundedString(ctor.symbol, 100)) {
-    return { error: inputError("constructor.symbol must be a non-empty string of at most 100 characters") };
+  for (const param of params) {
+    const kind = argKindForType(param.type);
+    if (kind === null) {
+      return {
+        error: inputError(
+          `constructor parameter ${param.name} has unsupported type ${param.type}`,
+        ),
+      };
+    }
+    if (!isValidArg(kind, ctor[param.name], knownNames)) {
+      return {
+        error: inputError(
+          `constructor.${param.name} must be ${describeArgKind(kind)}`,
+        ),
+      };
+    }
   }
   return { value: ctor };
 }
 
 function validateCall(
   value: unknown,
+  interfaceByName: ReadonlyMap<string, FunctionSpec>,
   knownNames: Set<string>,
 ): { value: Record<string, unknown> } | { error: PlaygroundApiError } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -260,22 +306,35 @@ function validateCall(
   }
   const call = value as Record<string, unknown>;
   const fn = call.fn;
-  if (typeof fn !== "string" || !(fn in CALL_SPECS)) {
-    return { error: inputError(`unsupported function: ${String(fn)}`) };
+  if (typeof fn !== "string") {
+    return { error: inputError("call.fn must be a function name") };
   }
-  const spec = CALL_SPECS[fn];
+  const spec = interfaceByName.get(fn);
+  if (!spec) {
+    return { error: inputError(`unsupported function: ${fn}`) };
+  }
   const args = call.args;
-  if (!Array.isArray(args) || args.length !== spec.args.length) {
+  if (!Array.isArray(args) || args.length !== spec.params.length) {
     const got = Array.isArray(args) ? args.length : "non-array";
     return {
-      error: inputError(`${fn} expects ${spec.args.length} argument(s), got ${got}`),
+      error: inputError(
+        `${fn} expects ${spec.params.length} argument(s), got ${got}`,
+      ),
     };
   }
   for (let i = 0; i < args.length; i++) {
-    if (!isValidArg(spec.args[i], args[i], knownNames)) {
+    const kind = argKindForType(spec.params[i].type);
+    if (kind === null) {
       return {
         error: inputError(
-          `${fn} argument ${i} must be ${describeArgKind(spec.args[i])}`,
+          `${fn} argument ${i} has unsupported type ${spec.params[i].type}`,
+        ),
+      };
+    }
+    if (!isValidArg(kind, args[i], knownNames)) {
+      return {
+        error: inputError(
+          `${fn} argument ${i} must be ${describeArgKind(kind)}`,
         ),
       };
     }
@@ -283,12 +342,12 @@ function validateCall(
   const signer = call.signer;
   if (signer !== undefined && !isAddressRef(signer, knownNames, false)) {
     return {
-      error: inputError(
-        "signer must be a known identity or a G/C strkey",
-      ),
+      error: inputError("signer must be a known identity or a G/C strkey"),
     };
   }
-  if (spec.requiresSigner && signer === undefined) {
+  const requiresSigner =
+    spec.authorization === "admin" || spec.authorization === "first-address";
+  if (requiresSigner && signer === undefined) {
     return { error: inputError(`${fn} requires a signer`) };
   }
   return { value: call };
@@ -308,6 +367,10 @@ function isValidArg(
       return isI128(value);
     case "u32":
       return isU32(value);
+    case "string":
+      return isBoundedString(value, MAX_STRING_LENGTH);
+    case "symbol":
+      return isBoundedString(value, MAX_SYMBOL_LENGTH);
   }
 }
 
@@ -321,6 +384,10 @@ function describeArgKind(kind: ArgKind): string {
       return "an integer (number or string)";
     case "u32":
       return "an unsigned 32-bit integer (number or string)";
+    case "string":
+      return "a non-empty string of at most 100 characters";
+    case "symbol":
+      return "a non-empty symbol of at most 32 characters";
   }
 }
 
