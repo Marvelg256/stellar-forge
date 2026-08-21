@@ -1,3 +1,19 @@
+> ## Historical audit notice
+>
+> This document records the **Phase 7 full product audit** of Stellar-Forge. It
+> is a **historical snapshot** of the project state at that point in time.
+>
+> Subsequent work (Phases 8–13, through the current release candidate) has
+> addressed, changed, or superseded a number of the findings below — for
+> example, the transaction system was completed, the `Token` contract was
+> deployed to Stellar Testnet, the Playground/Vercel build path was added, and
+> several reported bugs were remediated.
+>
+> **Do not treat this report as the current release status.** For the current
+> project state, capabilities, and limitations, consult `README.md` and the
+> repository itself. The original findings, bug IDs, and reasoning are retained
+> below as historical context.
+
 # Phase 7 — Full Product Audit Report
 
 **Date:** 2026-08-20
