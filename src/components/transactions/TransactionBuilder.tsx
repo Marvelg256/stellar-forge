@@ -193,7 +193,7 @@ export function TransactionBuilder() {
       );
 
       if (!response.ok) {
-        let detail = `Friendbot returned ${response.status}. It may already be funded — try rebuilding the transaction.`;
+        let detail = `Friendbot returned ${response.status}. It may already be funded. Try rebuilding the transaction.`;
         try {
           const body = (await response.json()) as { title?: string };
           if (body.title) detail = body.title;
@@ -348,7 +348,7 @@ export function TransactionBuilder() {
     if (fresh.status === "prepared") {
       setPreparation({ phase: "prepared", result: fresh });
       setNotice(
-        "The transaction expired before it was submitted. It has been refreshed — sign it again, then submit.",
+        "The transaction expired before it was submitted. It has been refreshed. Sign it again, then submit.",
       );
     } else {
       setPreparation(
@@ -412,7 +412,7 @@ async function checkSubmissionStatus() {
 
     if (result.submission.status === "PENDING") {
       setNotice(
-        "Still pending — the network has accepted the transaction but has not yet included it in a ledger. Check again in a moment.",
+        "Still pending: the network has accepted the transaction but has not yet included it in a ledger. Check again in a moment.",
       );
     }
   } else {
@@ -658,7 +658,7 @@ async function checkSubmissionStatus() {
           <p className="font-sans text-xs leading-relaxed text-accent-forge">
             This method is admin-only: it can only be authorized by the
             contract administrator. This tool does not expose the admin
-            address — if the connected wallet is not the admin, the
+            address. If the connected wallet is not the admin, the
             transaction will be rejected on-chain.
           </p>
         )}

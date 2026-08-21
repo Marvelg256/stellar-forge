@@ -42,7 +42,7 @@ export default function ComponentsPage() {
         </h1>
 
         <p className="mt-4 max-w-2xl font-sans text-base leading-relaxed text-text-secondary">
-          Each entry below outlines a common Soroban pattern — what it does
+          Each entry below outlines a common Soroban pattern: what it does
           and why you&apos;d reach for it. Components marked Implemented ship
           with a real, tested Soroban contract in the contracts workspace;
           the rest are catalog descriptions with code, docs, and playground

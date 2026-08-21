@@ -55,7 +55,7 @@ export default function DocsPage() {
 
         <p className="mt-5 max-w-2xl font-sans text-base leading-7 text-text-secondary sm:text-lg">
           Documentation for discovering, understanding, experimenting with,
-          and reusing Stellar and Soroban building blocks — from the catalog
+          and reusing Stellar and Soroban building blocks, from the catalog
           to the playground.
         </p>
 
@@ -145,7 +145,7 @@ export default function DocsPage() {
             <p>
               The Playground&apos;s Integration section generates a Rust
               example from the selected component&apos;s interface and your
-              configuration — an honest starting point to adapt, not an
+              configuration, an honest starting point to adapt, not an
               opaque abstraction.
             </p>
 
@@ -213,7 +213,7 @@ export default function DocsPage() {
           component with its configuration preselected, edit the fields, and
           inspect the structure it produces. For implemented components, the
           sandbox runs the real contract locally with deterministic mock
-          results — no network, no wallet, no gas costs.
+          results: no network, no wallet, no gas costs.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
@@ -235,7 +235,7 @@ export default function DocsPage() {
         <p className="mt-3 max-w-2xl font-sans text-sm leading-7 text-text-secondary">
           When a component makes sense for your project, the Integration
           section of the Playground generates a Rust example that ties the
-          component&apos;s interface together with your configuration — SDK
+          component&apos;s interface together with your configuration: SDK
           imports, deployment, and callable examples for every function.
           Rust is available today; concept components show a placeholder until
           their contract implementation lands.

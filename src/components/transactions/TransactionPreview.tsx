@@ -438,8 +438,9 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
               {preview.submissionStatus === "PENDING" && (
                 <p className="font-sans text-xs leading-relaxed text-text-secondary">
                   The network accepted this transaction but has not yet
-                  included it in a ledger. Re-checking its status is safe —
-                  the same signed transaction cannot be submitted twice.
+                  included it in a ledger. Re-checking its status is safe,
+                  because the same signed transaction cannot be submitted
+                  twice.
                 </p>
               )}
 

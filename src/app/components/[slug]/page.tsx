@@ -218,7 +218,7 @@ export default async function ComponentDetailPage({
 
               <p className="mt-4 font-sans text-sm leading-7 text-text-secondary">
                 {component.name} is currently documented as a reusable pattern
-                only — there is no contract implementation or interface spec to
+                only. There is no contract implementation or interface spec to
                 show yet. When the real contract lands, its interface and
                 sandbox support will appear here automatically.
               </p>

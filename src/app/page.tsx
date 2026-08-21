@@ -65,7 +65,7 @@ export default function Home() {
             </h3>
 
             <p className="mt-2 font-sans text-sm leading-6 text-text-secondary">
-              Reusable, inspectable building blocks — tokens, payments,
+              Reusable, inspectable building blocks: tokens, payments,
               access control, and more.
             </p>
           </Card>

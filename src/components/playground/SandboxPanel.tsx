@@ -61,9 +61,9 @@ function formatError(error: ExecutionStep["error"]): string {
     const details = error.code
       ? `${error.type ?? "Contract"}/${error.code}`
       : error.type ?? "contract error";
-    return `contract error — ${details}`;
+    return `contract error: ${details}`;
   }
-  return `${error.kind} error — ${error.message ?? "no details"}`;
+  return `${error.kind} error: ${error.message ?? "no details"}`;
 }
 
 function validateParamValue(
@@ -275,7 +275,7 @@ export function SandboxPanel({
           </>
         ) : (
           <span className="text-text-secondary">
-            not initialized — initialize to deploy {component.name}
+            not initialized. Initialize to deploy {component.name}
           </span>
         )}
       </div>

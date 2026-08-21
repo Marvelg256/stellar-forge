@@ -75,7 +75,7 @@ export function IntegrationPanel({
 
           <p className="mt-3 max-w-2xl font-sans text-sm leading-relaxed text-text-secondary">
             A Rust integration example generated from the catalog interface and
-            your configuration above — a starting point for real integration
+            your configuration above, a starting point for real integration
             work, not a complete SDK. Verify the output against your project
             before shipping.
           </p>
