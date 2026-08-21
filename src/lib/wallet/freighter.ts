@@ -204,7 +204,13 @@ export const freighterAdapter: WalletAdapter = {
 
       const instance = new api.WatchWalletChanges(2000);
       const watched = instance.watch((params) => {
-        if (params.error) return;
+        if (params.error) {
+          // The extension reported an error (e.g. the user revoked access
+          // or locked it). Transition the app to the disconnected state
+          // instead of staying stuck on the last "connected" value.
+          onChange({ type: "disconnected" });
+          return;
+        }
         onChange({
           type: "connected",
           connection: {

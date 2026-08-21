@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import {
-  componentWasmPath,
+  resolveRunner,
+  resolveWasm,
+} from "@/lib/playground/artifacts";
+import {
   getComponentBySlug,
   type FunctionSpec,
   type ParameterSpec,
@@ -18,15 +19,6 @@ const MAX_CALLS = 20;
 const MAX_IDENTITIES = 20;
 const MAX_STRING_LENGTH = 100;
 const MAX_SYMBOL_LENGTH = 32;
-
-const PROJECT_ROOT = process.cwd();
-const RUNNER_EXE = path.join(
-  PROJECT_ROOT,
-  "contracts",
-  "target",
-  "debug",
-  "sandbox-runner.exe",
-);
 
 const DEFAULT_IDENTITIES: ReadonlySet<string> = new Set([
   "admin",
@@ -66,15 +58,18 @@ function argKindForType(type: string): ArgKind | null {
 interface ValidatedRequest {
   component: StellarComponent;
   identities?: Record<string, string>;
+  constructorParams: { name: string; type: string }[];
   constructor: Record<string, unknown>;
   calls: Record<string, unknown>[];
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!existsSync(RUNNER_EXE)) {
+  const runner = resolveRunner();
+  if (!runner) {
     return apiErrorResponse({
       kind: "api",
-      message: `sandbox-runner executable not found at ${RUNNER_EXE}`,
+      message:
+        "sandbox-runner executable not found. Build it with `pnpm sandbox:build` (locally) — the Vercel deployment builds it automatically.",
       status: 503,
     });
   }
@@ -104,20 +99,21 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const component = validated.value.component;
-  const wasmPath = componentWasmPath(component);
-  if (!wasmPath || !existsSync(wasmPath)) {
+  const wasm = resolveWasm(component);
+  if (!wasm) {
     return apiErrorResponse({
       kind: "api",
-      message: `contract wasm artifact not found for component "${component.slug}" at ${wasmPath ?? "unknown path"}`,
+      message: `contract wasm artifact not found for component "${component.slug}". Build it with \`pnpm sandbox:build\` (locally) or restore the prebuilt artifact in contracts/prebuilt/`,
       status: 503,
     });
   }
 
   const runnerRequest = {
-    wasmPath,
+    wasmPath: wasm.path,
     ...(validated.value.identities !== undefined
       ? { identities: validated.value.identities }
       : {}),
+    constructorParams: validated.value.constructorParams,
     constructor: validated.value.constructor,
     calls: validated.value.calls,
   };
@@ -225,13 +221,24 @@ function validateRequest(
   for (const call of calls) {
     const checked = validateCall(call, interfaceByName, knownNames);
     if ("error" in checked) return checked;
-    checkedCalls.push(checked.value);
+    const spec = interfaceByName.get(checked.value.fn as string);
+    checkedCalls.push({
+      ...checked.value,
+      params: (spec?.params ?? []).map((param) => ({
+        name: param.name,
+        type: param.type,
+      })),
+    });
   }
 
   return {
     value: {
       component,
       ...(identities !== undefined ? { identities } : {}),
+      constructorParams: constructorFn.params.map((param) => ({
+        name: param.name,
+        type: param.type,
+      })),
       constructor: constructor.value,
       calls: checkedCalls,
     },
@@ -444,9 +451,14 @@ function isBoundedString(value: unknown, max: number): boolean {
 function runRunner(
   input: string,
 ): Promise<{ exitCode: number; stdout: string; killed: boolean }> {
+  const runner = resolveRunner();
+  if (!runner) {
+    return Promise.resolve({ exitCode: 1, stdout: "", killed: false });
+  }
+
   return new Promise((resolve) => {
     const child = execFile(
-      RUNNER_EXE,
+      runner.path,
       [],
       {
         timeout: RUNNER_TIMEOUT_MS,

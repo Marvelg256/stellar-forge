@@ -9,6 +9,7 @@ import { TransactionPreview } from "@/components/transactions/TransactionPreview
 import { WalletConnection } from "@/components/transactions/WalletConnection";
 import { stellarComponents } from "@/data/components";
 import {
+  authorizationInfo,
   buildPreview,
   buildTransactionRequest,
   callableMethods,
@@ -40,8 +41,18 @@ const inputClass =
 
 const implemented = implementedComponents(stellarComponents);
 
+type FundingState =
+  | { status: "idle" }
+  | { status: "funding" }
+  | { status: "success" }
+  | { status: "failed"; error: string };
+
 function signingError(message: string): WalletError {
   return { code: "unknown", message };
+}
+
+function shortenAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-6)}`;
 }
 
 export function TransactionBuilder() {
@@ -60,6 +71,8 @@ export function TransactionBuilder() {
   const [previousWalletAddress, setPreviousWalletAddress] = useState<
     string | null
   >(null);
+  const [funding, setFunding] = useState<FundingState>({ status: "idle" });
+  const [notice, setNotice] = useState<string | null>(null);
   const wallet = useWallet();
 
   const selectedComponent =
@@ -93,6 +106,8 @@ export function TransactionBuilder() {
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
     setSubmission({ phase: "idle" });
+    setFunding({ status: "idle" });
+    setNotice(null);
   }
 
   function selectComponent(slug: string) {
@@ -112,6 +127,7 @@ export function TransactionBuilder() {
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
     setSubmission({ phase: "idle" });
+    setNotice(null);
   }
 
   function selectMethod(methodName: string) {
@@ -133,6 +149,7 @@ export function TransactionBuilder() {
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
     setSubmission({ phase: "idle" });
+    setNotice(null);
   }
 
   function updateParameter(name: string, value: string) {
@@ -150,6 +167,8 @@ export function TransactionBuilder() {
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
     setSubmission({ phase: "idle" });
+    setFunding({ status: "idle" });
+    setNotice(null);
   }
 
   function updateSourceAccount(sourceAccount: string) {
@@ -157,9 +176,45 @@ export function TransactionBuilder() {
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
     setSubmission({ phase: "idle" });
+    setFunding({ status: "idle" });
+    setNotice(null);
+  }
+
+  async function fundWithFriendbot() {
+    const address = effectiveState.sourceAccount;
+    if (state.network !== "testnet" || !address) return;
+
+    setFunding({ status: "funding" });
+
+    try {
+      const response = await fetch(
+        `https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`,
+        { method: "POST" },
+      );
+
+      if (!response.ok) {
+        let detail = `Friendbot returned ${response.status}. It may already be funded — try rebuilding the transaction.`;
+        try {
+          const body = (await response.json()) as { title?: string };
+          if (body.title) detail = body.title;
+        } catch {
+          // keep the fallback detail
+        }
+        setFunding({ status: "failed", error: detail });
+        return;
+      }
+
+      setFunding({ status: "success" });
+    } catch {
+      setFunding({
+        status: "failed",
+        error: "Could not reach the Friendbot funding service.",
+      });
+    }
   }
 
   async function build() {
+    setNotice(null);
     const request = buildTransactionRequest(effectiveState);
     setPreparation({ phase: "built", request });
     setSigning({ phase: "idle" });
@@ -180,6 +235,7 @@ export function TransactionBuilder() {
   async function sign() {
     if (preparation.phase !== "prepared") return;
 
+    setNotice(null);
     setSubmission({ phase: "idle" });
 
     if (wallet.state.status !== "connected" || !wallet.state.address) {
@@ -266,37 +322,129 @@ export function TransactionBuilder() {
   }
 
   async function submit() {
-    if (signing.phase !== "signed" || !signing.signedXdr) return;
+  if (
+    preparation.phase !== "signed" ||
+    signing.phase !== "signed" ||
+    !signing.signedXdr
+  ) {
+    return;
+  }
 
-    setSubmission({ phase: "submitting" });
+  setNotice(null);
+  setSubmission({ phase: "submitting" });
 
-    const result = await submitSignedTransaction({
-      network: state.network,
-      signedXdr: signing.signedXdr,
+  const result = await submitSignedTransaction({
+    network: state.network,
+    signedXdr: signing.signedXdr,
+  });
+
+  if (!result.ok && result.error.code === "envelope.expired") {
+    const request = preparation.request;
+    setPreparation({ phase: "preparing", request });
+    setSigning({ phase: "idle" });
+    setSubmission({ phase: "idle" });
+
+    const fresh = await prepareTransactionRequest(request);
+    if (fresh.status === "prepared") {
+      setPreparation({ phase: "prepared", result: fresh });
+      setNotice(
+        "The transaction expired before it was submitted. It has been refreshed — sign it again, then submit.",
+      );
+    } else {
+      setPreparation(
+        fresh.status === "blocked"
+          ? { phase: "blocked", result: fresh }
+          : { phase: "failed", result: fresh },
+      );
+      setNotice(
+        "The transaction expired and could not be refreshed. Rebuild the transaction and try again.",
+      );
+    }
+    return;
+  }
+
+  if (result.ok) {
+    setSubmission({
+      phase: "submitted",
+      status: result.submission.status,
+      transactionHash: result.submission.transactionHash,
+      returnValue: result.submission.returnValue,
+      submittedAt: result.submission.submittedAt,
+      detail: result.submission.detail,
     });
 
-    if (result.ok) {
-      setSubmission({
-        phase: "submitted",
-        status: result.submission.status,
-        transactionHash: result.submission.transactionHash,
-        returnValue: result.submission.returnValue,
-        submittedAt: result.submission.submittedAt,
-        detail: result.submission.detail,
-      });
-    } else {
-      setSubmission({ phase: "submit-failed", error: result.error });
+    if (result.submission.status === "PENDING") {
+      setNotice(
+        'The transaction was accepted by the network but has not been confirmed yet. Use "Check status" to see whether it has been included in a ledger.',
+      );
     }
+  } else {
+    setSubmission({ phase: "submit-failed", error: result.error });
   }
+}
+
+async function checkSubmissionStatus() {
+  if (
+    preparation.phase !== "signed" ||
+    signing.phase !== "signed" ||
+    !signing.signedXdr
+  ) {
+    return;
+  }
+
+  setNotice(null);
+  setSubmission({ phase: "submitting" });
+
+  const result = await submitSignedTransaction({
+    network: state.network,
+    signedXdr: signing.signedXdr,
+  });
+
+  if (result.ok) {
+    setSubmission({
+      phase: "submitted",
+      status: result.submission.status,
+      transactionHash: result.submission.transactionHash,
+      returnValue: result.submission.returnValue,
+      submittedAt: result.submission.submittedAt,
+      detail: result.submission.detail,
+    });
+
+    if (result.submission.status === "PENDING") {
+      setNotice(
+        "Still pending — the network has accepted the transaction but has not yet included it in a ledger. Check again in a moment.",
+      );
+    }
+  } else {
+    setSubmission({ phase: "submit-failed", error: result.error });
+  }
+}
 
   function reset() {
     setState(initialBuilderState(stellarComponents));
     setPreparation({ phase: "draft" });
     setSigning({ phase: "idle" });
     setSubmission({ phase: "idle" });
+    setFunding({ status: "idle" });
+    setNotice(null);
   }
 
   const sourceAccountLocked = wallet.state.status === "connected";
+  const preparedSimulation =
+    preparation.phase === "prepared" ? preparation.result.simulation : undefined;
+  const sourceAccountUnfunded =
+    preparedSimulation !== undefined && !preparedSimulation.sourceAccountFunded;
+  const authorization = authorizationInfo(selectedMethod);
+  const authorizationParamValue =
+    authorization.kind === "first-address" && authorization.paramName
+      ? state.parameters[authorization.paramName]
+      : undefined;
+  const authorizationMismatch =
+    authorization.kind === "first-address" &&
+    wallet.state.status === "connected" &&
+    !!authorizationParamValue &&
+    authorizationParamValue !== wallet.state.address;
+  const submissionPending = submission.status === "PENDING";
 
   return (
     <div className="mt-10 grid items-start gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -370,6 +518,46 @@ export function TransactionBuilder() {
                   : "Connect a wallet to use its address as the source account."}
               </p>
             </div>
+
+            {sourceAccountUnfunded && (
+              <div className="mt-5 rounded-default border border-accent-forge/40 bg-accent-forge/10 p-3">
+                <p className="font-sans text-sm text-text-primary">
+                  Source account not funded
+                </p>
+
+                <p className="mt-1 font-sans text-xs leading-relaxed text-text-secondary">
+                  This account does not exist on{" "}
+                  {networkConfig(state.network).label} yet. Simulation works,
+                  but you must fund it before signing or submitting a
+                  transaction.
+                </p>
+
+                {funding.status === "success" ? (
+                  <p className="mt-2 font-sans text-xs leading-relaxed text-accent-stellar">
+                    Funded! Rebuild the transaction to sign and submit.
+                  </p>
+                ) : (
+                  state.network === "testnet" && (
+                    <Button
+                      variant="secondary"
+                      className="mt-2"
+                      onClick={() => void fundWithFriendbot()}
+                      disabled={funding.status === "funding"}
+                    >
+                      {funding.status === "funding"
+                        ? "Funding…"
+                        : "Fund with Friendbot"}
+                    </Button>
+                  )
+                )}
+
+                {funding.status === "failed" && (
+                  <p className="mt-2 font-sans text-xs leading-relaxed text-accent-forge">
+                    {funding.error}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </Card>
 
@@ -384,6 +572,11 @@ export function TransactionBuilder() {
               values={state.parameters}
               errors={validation.errors}
               onChange={updateParameter}
+              walletAddress={
+                wallet.state.status === "connected"
+                  ? (wallet.state.address ?? undefined)
+                  : undefined
+              }
             />
           </div>
         </Card>
@@ -400,6 +593,7 @@ export function TransactionBuilder() {
               preparation.phase !== "prepared" ||
               wallet.state.status !== "connected" ||
               walletNetworkMismatch ||
+              sourceAccountUnfunded ||
               signing.phase === "signing" ||
               signing.phase === "signed"
             }
@@ -413,17 +607,21 @@ export function TransactionBuilder() {
 
           <Button
             variant="secondary"
-            onClick={() => void submit()}
+            onClick={() =>
+              void (submissionPending ? checkSubmissionStatus() : submit())
+            }
             disabled={
               signing.phase !== "signed" ||
               submission.phase === "submitting" ||
-              submission.phase === "submitted"
+              (submission.phase === "submitted" && !submissionPending)
             }
           >
             {submission.phase === "submitting"
               ? "Submitting…"
               : submission.phase === "submitted"
-                ? "Submitted"
+                ? submissionPending
+                  ? "Check status"
+                  : "Submitted"
                 : "Submit Transaction"}
           </Button>
 
@@ -447,6 +645,42 @@ export function TransactionBuilder() {
               Connect a wallet to sign the prepared transaction.
             </p>
           )}
+
+        {preparation.phase === "prepared" && sourceAccountUnfunded && (
+          <p className="font-sans text-xs leading-relaxed text-accent-forge">
+            The source account is not funded on{" "}
+            {networkConfig(state.network).label}. Fund it before signing or
+            submitting a transaction.
+          </p>
+        )}
+
+        {authorization.kind === "admin" && (
+          <p className="font-sans text-xs leading-relaxed text-accent-forge">
+            This method is admin-only: it can only be authorized by the
+            contract administrator. This tool does not expose the admin
+            address — if the connected wallet is not the admin, the
+            transaction will be rejected on-chain.
+          </p>
+        )}
+
+        {authorizationMismatch && (
+          <p className="font-sans text-xs leading-relaxed text-accent-forge">
+            {authorization.paramName} must be authorized by its owner. The
+            connected wallet ({shortenAddress(wallet.state.address ?? "")}) is
+            not that address, so the transaction will be rejected on-chain.
+            Connect the wallet that owns{" "}
+            <span className="font-mono text-[11px]">
+              {authorizationParamValue}
+            </span>
+            .
+          </p>
+        )}
+
+        {notice && (
+          <p className="rounded-default border border-accent-stellar/40 bg-accent-stellar/10 p-2 font-sans text-xs leading-relaxed text-text-primary">
+            {notice}
+          </p>
+        )}
       </div>
 
       <TransactionPreview preview={preview} />

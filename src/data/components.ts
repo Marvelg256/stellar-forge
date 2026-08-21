@@ -164,11 +164,12 @@ export const stellarComponents: StellarComponent[] = [
         name: "transfer",
         params: [
           { name: "from", type: "Address" },
-          { name: "to_muxed", type: "MuxedAddress" },
+          { name: "to", type: "MuxedAddress" },
           { name: "amount", type: "i128" },
         ],
         authorization: "first-address",
-        description: "Transfers amount from from to to_muxed, authorized by from.",
+        description:
+          "Transfers amount from from to to (an account or muxed address), authorized by from.",
       },
       {
         name: "allowance",

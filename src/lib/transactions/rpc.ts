@@ -1,4 +1,5 @@
 import {
+  Account,
   BASE_FEE,
   Operation,
   StrKey,
@@ -54,17 +55,13 @@ export async function simulateSorobanInvocation(
     return { ok: false, error: rpcUnavailable(network) };
   }
 
-  let account;
+  let account: Account;
+  let sourceAccountFunded = true;
   try {
     account = await server.getAccount(input.sourceAccount);
   } catch {
-    return {
-      ok: false,
-      error: {
-        code: "source-account-not-found",
-        message: `Source account ${input.sourceAccount} was not found on ${network.label}. Fund it before preparing a transaction.`,
-      },
-    };
+    account = new Account(input.sourceAccount, "0");
+    sourceAccountFunded = false;
   }
 
   const tx = new TransactionBuilder(account, {
@@ -104,7 +101,11 @@ export async function simulateSorobanInvocation(
       ok: false,
       error: {
         code: "simulation-failed",
-        message: `Soroban simulation failed: ${simulation.error ?? "unknown error"}.`,
+        message:
+          "The simulation failed. This usually means the contract rejected the call — for example, the caller lacks authorization, or one of the arguments is invalid for the current contract state.",
+        ...(simulation.error
+          ? { detail: truncate(simulation.error) }
+          : {}),
       },
     };
   }
@@ -140,6 +141,7 @@ export async function simulateSorobanInvocation(
         ? { type: retval.switch().name, value: nativeToDisplay(nativeResult) }
         : null,
       isReadCall,
+      sourceAccountFunded,
       transactionData: assembledXdr,
       expiresAt: envelopeExpiryMs(tx),
     },

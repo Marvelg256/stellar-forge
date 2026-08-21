@@ -1,0 +1,9 @@
+# Normalize line endings so shell scripts and Rust sources are LF in the
+# repo (required for the Linux/Vercel build that runs vercel-sandbox-build.sh).
+* text=auto eol=lf
+
+# Binary artifacts that must not be line-ending normalized.
+*.wasm binary
+*.exe binary
+*.png binary
+*.svg text

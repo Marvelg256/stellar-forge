@@ -6,6 +6,7 @@ export interface ParameterFormProps {
   values: Record<string, string>;
   errors: Record<string, string>;
   onChange: (name: string, value: string) => void;
+  walletAddress?: string;
 }
 
 export function ParameterForm({
@@ -13,6 +14,7 @@ export function ParameterForm({
   values,
   errors,
   onChange,
+  walletAddress,
 }: ParameterFormProps) {
   if (params.length === 0) {
     return (
@@ -60,6 +62,17 @@ export function ParameterForm({
                 {error}
               </p>
             )}
+
+            {(param.type === "Address" || param.type === "MuxedAddress") &&
+              walletAddress && (
+                <button
+                  type="button"
+                  onClick={() => onChange(param.name, walletAddress)}
+                  className="mt-1.5 inline-flex items-center gap-1 font-mono text-[11px] text-accent-stellar transition-colors hover:text-accent-stellar/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-stellar"
+                >
+                  Use connected wallet
+                </button>
+              )}
           </div>
         );
       })}

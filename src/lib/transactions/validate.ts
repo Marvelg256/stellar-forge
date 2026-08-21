@@ -10,6 +10,8 @@ import type {
 const INTEGER_PATTERN = /^-?\d+$/;
 const UNSIGNED_PATTERN = /^\d+$/;
 const U32_MAX = 4294967295;
+const I128_MIN = -(BigInt(2) ** BigInt(127));
+const I128_MAX = BigInt(2) ** BigInt(127) - BigInt(1);
 
 export function validateTransactionRequest(
   request: TransactionRequest,
@@ -113,7 +115,13 @@ function parameterValueIsValid(param: ParameterSpec, rawValue: string): boolean 
 
   switch (param.type) {
     case "i128":
-      return INTEGER_PATTERN.test(value);
+      if (!INTEGER_PATTERN.test(value)) return false;
+      try {
+        const n = BigInt(value);
+        return n >= I128_MIN && n <= I128_MAX;
+      } catch {
+        return false;
+      }
     case "u32":
       return UNSIGNED_PATTERN.test(value) && Number(value) <= U32_MAX;
     case "Address":
@@ -127,7 +135,7 @@ function parameterValueIsValid(param: ParameterSpec, rawValue: string): boolean 
 function parameterTypeMessage(type: string): string {
   switch (type) {
     case "i128":
-      return "Expected an integer value (e.g. 1000000).";
+      return "Expected an integer between -2^127 and 2^127-1.";
     case "u32":
       return "Expected an unsigned 32-bit integer (0-4294967295).";
     case "Address":

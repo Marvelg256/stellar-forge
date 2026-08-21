@@ -1,4 +1,5 @@
 import type {
+  FunctionAuthorization,
   FunctionSpec,
   ParameterSpec,
   StellarComponent,
@@ -57,6 +58,43 @@ export function parameterPlaceholder(param: ParameterSpec): string {
       return "symbol";
     default:
       return "";
+  }
+}
+
+export function authorizationInfo(
+  method: FunctionSpec | undefined,
+): {
+  kind: FunctionAuthorization;
+  description: string;
+  paramName?: string;
+} {
+  const kind = method?.authorization ?? "none";
+
+  switch (kind) {
+    case "admin":
+      return {
+        kind,
+        description:
+          "Requires the contract administrator's wallet. The admin is set when the contract is deployed and is not exposed by this tool — if the connected wallet is not the admin, the transaction will be rejected on-chain.",
+      };
+    case "first-address": {
+      const first = method?.params.find(
+        (param) => param.type === "Address" || param.type === "MuxedAddress",
+      );
+      return {
+        kind,
+        paramName: first?.name,
+        description: `Requires authorization from the first address argument${
+          first?.name ? ` (${first.name})` : ""
+        }. The wallet that signs must own that address, otherwise the transaction will be rejected on-chain.`,
+      };
+    }
+    default:
+      return {
+        kind,
+        description:
+          "No special authorization required. Any wallet can invoke this method.",
+      };
   }
 }
 
@@ -196,6 +234,8 @@ export function buildPreview(
     contractAddress: deployment ?? undefined,
     preparationError,
     simulation: preparedSimulation,
+    sourceAccountFunded: preparedSimulation?.sourceAccountFunded,
+    authorization: authorizationInfo(method),
     preparedAt:
       preparation.phase === "prepared"
         ? preparation.result.metadata.preparedAt

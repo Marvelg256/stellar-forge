@@ -2,6 +2,7 @@ import type {
   NetworkConfig,
   TransactionNetwork,
 } from "@/lib/transactions/networks";
+import type { FunctionAuthorization } from "@/data/components";
 import type { WalletError, WalletStatus } from "@/lib/wallet/types";
 
 export interface TransactionBuilderState {
@@ -93,6 +94,7 @@ export interface SimulationInfo {
     value: string;
   } | null;
   isReadCall: boolean;
+  sourceAccountFunded: boolean;
   transactionData: string;
   /**
    * Unix milliseconds at which the prepared envelope's time bounds expire.
@@ -207,6 +209,12 @@ export interface TransactionPreviewData {
   contractAddress?: string;
   preparationError?: TransactionPreparationError;
   simulation?: SimulationInfo;
+  sourceAccountFunded?: boolean;
+  authorization?: {
+    kind: FunctionAuthorization;
+    description: string;
+    paramName?: string;
+  };
   preparedAt?: string;
   expiresAt?: number;
   expired: boolean;

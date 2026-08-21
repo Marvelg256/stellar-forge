@@ -72,19 +72,36 @@ export async function submitTransaction(
   }
 
   if (sendResult.status === "ERROR") {
+    const resultDetail = sendResult.errorResult
+      ? transactionResultDetail(sendResult.errorResult)
+      : undefined;
+
+    const authMessage = resultDetail
+      ? authorizationFailureMessage(resultDetail)
+      : null;
+
     return {
       ok: false,
       error: {
         code: "submit-rejected",
-        message: "The network rejected the transaction.",
-        ...(sendResult.errorResult
-          ? {
-              detail: truncate(
-                transactionResultDetail(sendResult.errorResult) ??
-                  "The transaction result could not be decoded.",
-              ),
-            }
+        message: authMessage ?? "The network rejected the transaction.",
+        ...(resultDetail
+          ? { detail: truncate(resultDetail) }
           : {}),
+      },
+    };
+  }
+
+  if (sendResult.status === "TRY_AGAIN_LATER") {
+    const outcome = await pollForSettlement(server, sendResult.hash);
+    if (outcome !== null) return outcome;
+
+    return {
+      ok: false,
+      error: {
+        code: "submit-rejected",
+        message:
+          "The network is busy and did not accept the transaction right now. Wait a moment and try again — re-sending the same signed transaction is safe and will not create a duplicate.",
       },
     };
   }
@@ -227,7 +244,8 @@ function verifyTimeBounds(tx: Transaction): TransactionSubmissionError | null {
   if (nowSeconds >= maxTime) {
     return {
       code: "envelope.expired",
-      message: "The transaction time bounds have already expired.",
+      message:
+        "The transaction expired before it was submitted. The prepare step will refresh it so you can sign again.",
     };
   }
 
@@ -242,11 +260,17 @@ function verifyTimeBounds(tx: Transaction): TransactionSubmissionError | null {
   return null;
 }
 
-async function pollForResult(
+function authorizationFailureMessage(resultDetail: string): string | null {
+  if (!/invokeHostFunction/i.test(resultDetail) || !/txFailed/i.test(resultDetail)) {
+    return null;
+  }
+  return `The contract rejected the transaction at execution time. This typically means the signing wallet is not the account the contract requires (for example, it is not the owner of the first address argument or the contract admin). Technical detail: ${resultDetail}`;
+}
+
+async function pollForSettlement(
   server: Server,
   transactionHash: string,
-  latestLedger: number,
-): Promise<SubmitTransactionResult> {
+): Promise<SubmitTransactionResult | null> {
   let polls = 0;
 
   while (polls < MAX_POLLS) {
@@ -257,10 +281,7 @@ async function pollForResult(
     try {
       result = await server.getTransaction(transactionHash);
     } catch (error) {
-      return {
-        ok: false,
-        error: rpcFailure(undefined, error),
-      };
+      return { ok: false, error: rpcFailure(undefined, error) };
     }
 
     if (result.status === Api.GetTransactionStatus.NOT_FOUND) {
@@ -286,6 +307,10 @@ async function pollForResult(
       };
     }
 
+    const rawDetail =
+      transactionResultDetail(result.resultXdr) ??
+      "The transaction failed on-chain.";
+
     return {
       ok: true,
       submission: {
@@ -294,12 +319,22 @@ async function pollForResult(
         submittedAt: new Date().toISOString(),
         returnValue: null,
         detail: truncate(
-          transactionResultDetail(result.resultXdr) ??
-            "The transaction failed on-chain.",
+          authorizationFailureMessage(rawDetail) ?? rawDetail,
         ),
       },
     };
   }
+
+  return null;
+}
+
+async function pollForResult(
+  server: Server,
+  transactionHash: string,
+  latestLedger: number,
+): Promise<SubmitTransactionResult> {
+  const outcome = await pollForSettlement(server, transactionHash);
+  if (outcome !== null) return outcome;
 
   return {
     ok: true,

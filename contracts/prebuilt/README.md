@@ -1,0 +1,46 @@
+# Prebuilt Sandbox Artifacts
+
+Files in this directory are build outputs committed to the repository so the
+Playground works on Vercel without a Rust toolchain during deployment.
+
+## What is committed here
+
+| File | Purpose | Platform |
+| --- | --- | --- |
+| `token.wasm` | Soroban contract WASM executed inside the sandbox | platform-independent |
+
+Contract WASM is compiled once from the Rust source in
+`contracts/contracts/<package>` and is byte-identical on every OS, so the
+committed copy is the deployment artifact. The Playground API prefers the
+locally built wasm (`contracts/target/wasm32v1-none/release/`) when present
+and falls back to this directory.
+
+The native `sandbox-runner` binary is **never** committed:
+
+- **Local development** — build it with `pnpm sandbox:build` (compiles
+  `contracts/target/debug/sandbox-runner`).
+- **Vercel** — `scripts/vercel-sandbox-build.sh` compiles it from source on
+  Vercel's Linux builder during `vercel-build`, so the binary always matches
+  the function runtime (x86-64 Linux, correct glibc).
+
+## Refreshing the prebuilt wasm
+
+After changing a contract in the workspace:
+
+```bash
+pnpm sandbox:build --prebuilt
+```
+
+This rebuilds the wasm via the Stellar CLI and copies it here. Commit the
+updated file together with the contract source change.
+
+## Why this works on Vercel
+
+1. `contracts/prebuilt/token.wasm` is part of the git checkout Vercel builds.
+2. `next.config.ts` (`outputFileTracingIncludes`) copies the wasm and the
+   built runner into the Playground serverless function bundle — the API
+   route references both through runtime-computed paths that static tracing
+   cannot discover.
+3. `vercel-build` compiles the Linux runner from source before `next build`.
+4. The API route resolves the first existing artifact and returns a clear
+   503 with build instructions when artifacts are missing.

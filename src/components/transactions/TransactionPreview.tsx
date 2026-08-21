@@ -63,6 +63,18 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
         </div>
       </dl>
 
+      {preview.authorization && (
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="font-sans text-sm text-text-secondary">
+            Authorization
+          </p>
+
+          <p className="mt-2 font-sans text-xs leading-relaxed text-text-primary">
+            {preview.authorization.description}
+          </p>
+        </div>
+      )}
+
       {preview.arguments.length > 0 && (
         <div className="mt-5 border-t border-border pt-4">
           <p className="font-sans text-sm text-text-secondary">Arguments</p>
@@ -205,10 +217,10 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
 
             <div className="flex items-baseline justify-between gap-4">
               <dt className="font-sans text-xs text-text-secondary">
-                Read call
+                Read-only / State-changing
               </dt>
               <dd className="font-mono text-xs text-text-primary">
-                {preview.simulation.isReadCall ? "Yes" : "No"}
+                {preview.simulation.isReadCall ? "Read-only" : "State-changing"}
               </dd>
             </div>
 
@@ -227,6 +239,20 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
               </div>
             )}
           </dl>
+
+          {preview.sourceAccountFunded === false && (
+            <p className="mt-3 rounded-default border border-accent-forge/40 bg-accent-forge/10 p-2 font-sans text-xs leading-relaxed text-text-primary">
+              This source account is not funded on {preview.networkLabel}.
+              Simulation works, but you must fund the account before signing
+              or submitting a transaction.
+            </p>
+          )}
+
+          <p className="mt-3 font-sans text-xs leading-relaxed text-text-secondary">
+            {preview.simulation.isReadCall
+              ? "Read-only calls inspect contract state without changing anything on-chain."
+              : "This is a state-changing transaction. When submitted, it will update ledger state and consume network resources (fees)."}
+          </p>
 
           {preview.expired && (
             <p className="mt-3 rounded-default border border-accent-forge/40 bg-accent-forge/10 p-2 font-sans text-xs leading-relaxed text-text-primary">
@@ -407,6 +433,14 @@ export function TransactionPreview({ preview }: TransactionPreviewProps) {
                     {preview.submissionReturnValue.value}
                   </span>
                 </div>
+              )}
+
+              {preview.submissionStatus === "PENDING" && (
+                <p className="font-sans text-xs leading-relaxed text-text-secondary">
+                  The network accepted this transaction but has not yet
+                  included it in a ledger. Re-checking its status is safe —
+                  the same signed transaction cannot be submitted twice.
+                </p>
               )}
 
               {preview.submissionDetail && (

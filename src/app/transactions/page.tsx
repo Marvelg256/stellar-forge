@@ -1,5 +1,28 @@
 import { TransactionBuilder } from "@/components/transactions/TransactionBuilder";
 
+const lifecycleSteps = [
+  {
+    number: "1",
+    title: "Build",
+    body: "Pick a component and method, fill in the arguments, and choose the account that pays the fee.",
+  },
+  {
+    number: "2",
+    title: "Simulate",
+    body: "The prepared transaction is run against a live Soroban RPC so you can preview the result without changing anything on-chain.",
+  },
+  {
+    number: "3",
+    title: "Sign",
+    body: "Authorize the transaction with your Freighter wallet. The wallet must be able to authorize the method (see the Authorization note in the preview).",
+  },
+  {
+    number: "4",
+    title: "Submit",
+    body: "The signed transaction is sent to the network. State-changing transactions update ledger state and consume network resources; read-only calls never write anything.",
+  },
+];
+
 export default function TransactionsPage() {
   return (
     <main className="flex-1">
@@ -20,6 +43,25 @@ export default function TransactionsPage() {
             parameters, and build a typed transaction request.
           </p>
         </div>
+
+        <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {lifecycleSteps.map((step) => (
+            <li
+              key={step.number}
+              className="flex flex-col gap-2 rounded-default border border-border bg-surface p-4"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-stellar/15 font-mono text-sm text-accent-stellar">
+                {step.number}
+              </span>
+              <h2 className="font-sans text-sm font-medium text-text-primary">
+                {step.title}
+              </h2>
+              <p className="font-sans text-xs leading-relaxed text-text-secondary">
+                {step.body}
+              </p>
+            </li>
+          ))}
+        </ol>
 
         <TransactionBuilder />
       </section>

@@ -10,8 +10,8 @@ use soroban_sdk::{
     Vec as SdkVec,
 };
 
-/// Default location of the built token contract wasm, relative to the
-/// repository root. Overridable via the `wasmPath` request field.
+/// Default location of the built contract wasm, relative to the repository
+/// root. Overridable via the `wasmPath` request field.
 const DEFAULT_WASM_PATH: &str = "contracts/target/wasm32v1-none/release/token.wasm";
 
 /// Salt used to derive the deployed contract's address.
@@ -26,39 +26,12 @@ const DEFAULT_IDENTITIES: &[(&str, &str)] = &[
     ("deployer", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"),
 ];
 
-/// The token interface is fixed and known: arguments are positional and typed
-/// per function, matching the interface declared in `src/data/components.ts`.
-enum ArgSpec {
-    Address,
-    Muxed,
-    I128,
-    U32,
-}
-
-fn arg_specs(fn_name: &str) -> Option<&'static [ArgSpec]> {
-    Some(match fn_name {
-        "name" | "symbol" | "decimals" => &[],
-        "balance" => &[ArgSpec::Address],
-        "allowance" => &[ArgSpec::Address, ArgSpec::Address],
-        "transfer" => &[ArgSpec::Address, ArgSpec::Muxed, ArgSpec::I128],
-        "approve" => &[
-            ArgSpec::Address,
-            ArgSpec::Address,
-            ArgSpec::I128,
-            ArgSpec::U32,
-        ],
-        "transfer_from" => &[
-            ArgSpec::Address,
-            ArgSpec::Address,
-            ArgSpec::Address,
-            ArgSpec::I128,
-        ],
-        "burn" => &[ArgSpec::Address, ArgSpec::I128],
-        "burn_from" => &[ArgSpec::Address, ArgSpec::Address, ArgSpec::I128],
-        "mint" => &[ArgSpec::Address, ArgSpec::I128],
-        "set_admin" => &[ArgSpec::Address],
-        _ => return None,
-    })
+/// A single typed parameter declaration. The schema is provided by the
+/// TypeScript catalog (`src/data/components.ts`) and attached by the API route,
+/// so the runner stays agnostic of any specific contract's interface.
+struct ParamSpec {
+    name: String,
+    type_name: String,
 }
 
 fn main() {
@@ -107,26 +80,16 @@ fn execute(request: Value) -> Value {
         Err(e) => return runner_error(format!("failed to read wasm at {wasm_path:?}: {e}")),
     };
 
+    let constructor_params = match request.get("constructorParams") {
+        Some(v) => match parse_param_specs(v) {
+            Ok(params) => params,
+            Err(e) => return runner_error(format!("constructorParams: {e}")),
+        },
+        None => return runner_error("request is missing the 'constructorParams' array".to_string()),
+    };
     let constructor = match request.get("constructor") {
         Some(c) => c,
         None => return runner_error("request is missing the 'constructor' object".to_string()),
-    };
-    let admin_name = match constructor.get("admin").and_then(Value::as_str) {
-        Some(admin) => admin,
-        None => return runner_error("constructor.admin is required".to_string()),
-    };
-    let admin_key = identities.get(admin_name).map(String::as_str).unwrap_or(admin_name);
-    let decimal = match parse_u32(&constructor.get("decimal").cloned().unwrap_or(Value::Null)) {
-        Ok(d) => d,
-        Err(e) => return runner_error(format!("constructor.decimal: {e}")),
-    };
-    let name = match constructor.get("name").and_then(Value::as_str) {
-        Some(name) => name.to_string(),
-        None => return runner_error("constructor.name is required".to_string()),
-    };
-    let symbol = match constructor.get("symbol").and_then(Value::as_str) {
-        Some(symbol) => symbol.to_string(),
-        None => return runner_error("constructor.symbol is required".to_string()),
     };
     let calls = match request.get("calls").and_then(Value::as_array) {
         Some(calls) => calls,
@@ -134,10 +97,21 @@ fn execute(request: Value) -> Value {
     };
 
     let env = Env::default();
-    if !(admin_key.starts_with('G') || admin_key.starts_with('C')) {
-        return runner_error(format!("constructor.admin is not a known identity or strkey: {admin_name}"));
+
+    // Build the constructor values from the schema, positionally, so the deploy
+    // works for any contract whose constructor only uses supported types.
+    let mut ctor_vals = Vec::with_capacity(constructor_params.len());
+    for param in &constructor_params {
+        let value = match constructor.get(&param.name) {
+            Some(value) => value,
+            None => return runner_error(format!("constructor.{} is required", param.name)),
+        };
+        match build_arg(&env, &param.type_name, value, &identities) {
+            Ok(val) => ctor_vals.push(val),
+            Err(e) => return runner_error(format!("constructor.{}: {e}", param.name)),
+        }
     }
-    let admin = Address::from_str(&env, admin_key);
+
     let deployer = Address::from_str(&env, &identities["deployer"]);
 
     // Deployment runs the constructor; constructor auth is mocked exactly like
@@ -147,27 +121,19 @@ fn execute(request: Value) -> Value {
     env.mock_all_auths();
     let wasm_bytes: Bytes = Bytes::from_slice(&env, &wasm);
     let wasm_hash = env.deployer().upload_contract_wasm(wasm_bytes);
-    let token = env
+    let contract = env
         .deployer()
         .with_address(deployer, DEPLOY_SALT)
-        .deploy_v2(
-            wasm_hash,
-            (
-                admin,
-                decimal,
-                SdkString::from_str(&env, &name),
-                SdkString::from_str(&env, &symbol),
-            ),
-        );
+        .deploy_v2(wasm_hash, SdkVec::from_iter(&env, ctor_vals));
     env.set_auths(&[]);
 
     let mut results = Vec::with_capacity(calls.len());
     for call in calls {
-        results.push(execute_call(&env, &token, &identities, call));
+        results.push(execute_call(&env, &contract, &identities, call));
     }
 
     let deployed_strkey =
-        std::string::String::from_utf8(token.to_string().to_bytes().to_alloc_vec())
+        std::string::String::from_utf8(contract.to_string().to_bytes().to_alloc_vec())
             .unwrap_or_else(|_| "INVALID_STRKEY".to_string());
 
     json!({
@@ -179,7 +145,7 @@ fn execute(request: Value) -> Value {
 
 fn execute_call(
     env: &Env,
-    token: &Address,
+    contract: &Address,
     identities: &HashMap<String, String>,
     call: &Value,
 ) -> Value {
@@ -192,8 +158,15 @@ fn execute_call(
             "__constructor runs at deployment time via the request 'constructor' field".to_string(),
         );
     }
+    let params = match call.get("params") {
+        Some(v) => match parse_param_specs(v) {
+            Ok(params) => params,
+            Err(e) => return call_error(Some(fn_name), format!("params: {e}")),
+        },
+        None => return call_error(Some(fn_name), "call is missing the 'params' array".to_string()),
+    };
     let args = call.get("args").cloned().unwrap_or(Value::Null);
-    let arg_vals = match build_args(env, fn_name, &args, identities) {
+    let arg_vals = match build_args(env, fn_name, &params, &args, identities) {
         Ok(vals) => vals,
         Err(e) => return call_error(Some(fn_name), e),
     };
@@ -206,7 +179,7 @@ fn execute_call(
         env.mock_auths(&[MockAuth {
             address: &address,
             invoke: &MockAuthInvoke {
-                contract: token,
+                contract,
                 fn_name,
                 args: arg_vals.clone(),
                 sub_invokes: &[],
@@ -215,7 +188,7 @@ fn execute_call(
     }
 
     let result: Result<Result<Val, _>, _> =
-        env.try_invoke_contract(&token, &Symbol::new(env, fn_name), arg_vals);
+        env.try_invoke_contract(&contract, &Symbol::new(env, fn_name), arg_vals);
     match result {
         Ok(Ok(val)) => json!({
             "fn": fn_name,
@@ -242,50 +215,85 @@ fn execute_call(
 fn build_args(
     env: &Env,
     fn_name: &str,
+    params: &[ParamSpec],
     args: &Value,
     identities: &HashMap<String, String>,
 ) -> Result<SdkVec<Val>, String> {
-    let specs = arg_specs(fn_name).ok_or_else(|| format!("unsupported function: {fn_name}"))?;
     let arr = args
         .as_array()
         .ok_or_else(|| format!("args for {fn_name} must be a JSON array"))?;
-    if arr.len() != specs.len() {
+    if arr.len() != params.len() {
         return Err(format!(
             "{fn_name} expects {} argument(s), got {}",
-            specs.len(),
+            params.len(),
             arr.len()
         ));
     }
-    let mut vals = Vec::with_capacity(specs.len());
-    for (spec, arg) in specs.iter().zip(arr) {
-        vals.push(build_arg(env, spec, arg, identities)?);
+    let mut vals = Vec::with_capacity(params.len());
+    for (param, arg) in params.iter().zip(arr) {
+        vals.push(build_arg(env, &param.type_name, arg, identities)?);
     }
     Ok(SdkVec::from_iter(env, vals))
 }
 
 fn build_arg(
     env: &Env,
-    spec: &ArgSpec,
+    type_name: &str,
     arg: &Value,
     identities: &HashMap<String, String>,
 ) -> Result<Val, String> {
-    match spec {
-        ArgSpec::Address => {
+    match type_name {
+        "Address" => {
             let s = arg
                 .as_str()
                 .ok_or_else(|| format!("address argument must be a string, got {arg}"))?;
             Ok(resolve_address(env, identities, s)?.to_val())
         }
-        ArgSpec::Muxed => {
+        "MuxedAddress" => {
             let s = arg
                 .as_str()
                 .ok_or_else(|| format!("muxed address argument must be a string, got {arg}"))?;
             let strkey = identities.get(s).map(String::as_str).unwrap_or(s);
             Ok(MuxedAddress::from_str(env, strkey).to_val())
         }
-        ArgSpec::I128 => Ok(parse_i128(arg)?.into_val(env)),
-        ArgSpec::U32 => Ok(parse_u32(arg)?.into_val(env)),
+        "i128" => Ok(parse_i128(arg)?.into_val(env)),
+        "u32" => Ok(parse_u32(arg)?.into_val(env)),
+        "String" => {
+            let s = arg
+                .as_str()
+                .ok_or_else(|| format!("string argument must be a string, got {arg}"))?;
+            Ok(SdkString::from_str(env, s).to_val())
+        }
+        "Symbol" => {
+            let s = arg
+                .as_str()
+                .ok_or_else(|| format!("symbol argument must be a string, got {arg}"))?;
+            Ok(Symbol::new(env, s).to_val())
+        }
+        other => Err(format!("unsupported parameter type: {other}")),
     }
+}
+
+fn parse_param_specs(value: &Value) -> Result<Vec<ParamSpec>, String> {
+    let arr = value
+        .as_array()
+        .ok_or_else(|| "must be a JSON array".to_string())?;
+    let mut specs = Vec::with_capacity(arr.len());
+    for item in arr {
+        let name = item
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "param is missing a string 'name'".to_string())?;
+        let type_name = item
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("param {name:?} is missing a string 'type'"))?;
+        specs.push(ParamSpec {
+            name: name.to_string(),
+            type_name: type_name.to_string(),
+        });
+    }
+    Ok(specs)
 }
 
 fn resolve_address(
@@ -326,15 +334,60 @@ fn parse_u32(value: &Value) -> Result<u32, String> {
 }
 
 fn val_to_json(env: &Env, val: &Val) -> Value {
-    let scval = match ScVal::try_from_val(env, val) {
-        Ok(scval) => scval,
-        Err(_) => return json!(format!("{val:?}")),
-    };
+    match ScVal::try_from_val(env, val) {
+        Ok(scval) => scval_to_json(env, scval),
+        Err(_) => json!(format!("{val:?}")),
+    }
+}
+
+fn scval_to_json(env: &Env, scval: ScVal) -> Value {
     match scval {
         ScVal::Void => Value::Null,
-        ScVal::I128(parts) => json!(((parts.hi as i128) << 64) | parts.lo as i128),
+        ScVal::Bool(b) => json!(b),
         ScVal::U32(n) => json!(n),
-        ScVal::String(s) => json!(String::from_utf8_lossy(&s.0).to_string()),
+        ScVal::I32(n) => json!(n),
+        ScVal::U64(n) => json!(n),
+        ScVal::I64(n) => json!(n),
+        ScVal::Timepoint(t) => json!(t.0),
+        ScVal::Duration(d) => json!(d.0),
+        ScVal::U128(parts) => json!(((parts.hi as u128) << 64) | parts.lo as u128),
+        ScVal::I128(parts) => json!(((parts.hi as i128) << 64) | parts.lo as i128),
+        ScVal::Bytes(bytes) => json!(format!(
+            "0x{}",
+            bytes
+                .0
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<std::string::String>()
+        )),
+        ScVal::String(s) => json!(std::string::String::from_utf8_lossy(&s.0).to_string()),
+        ScVal::Symbol(s) => json!(std::string::String::from_utf8_lossy(&s.0).to_string()),
+        ScVal::Vec(Some(items)) => json!(
+            items
+                .0
+                .iter()
+                .map(|v| scval_to_json(env, v.clone()))
+                .collect::<Vec<_>>()
+        ),
+        ScVal::Vec(None) => json!([]),
+        ScVal::Map(Some(pairs)) => json!(
+            pairs
+                .0
+                .iter()
+                .map(|entry| json!({
+                    "key": scval_to_json(env, entry.key.clone()),
+                    "value": scval_to_json(env, entry.val.clone()),
+                }))
+                .collect::<Vec<_>>()
+        ),
+        ScVal::Map(None) => json!({}),
+        ScVal::Address(sc_address) => match Address::try_from_val(env, &sc_address) {
+            Ok(address) => json!(
+                std::string::String::from_utf8(address.to_string().to_bytes().to_alloc_vec())
+                    .unwrap_or_default()
+            ),
+            Err(_) => json!(format!("{sc_address:?}")),
+        },
         other => json!(format!("{other:?}")),
     }
 }
@@ -384,4 +437,97 @@ fn call_error(fn_name: Option<&str>, message: String) -> Value {
 
 fn runner_error(message: String) -> Value {
     json!({ "ok": false, "error": { "kind": "runner", "message": message } })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn identities() -> HashMap<String, String> {
+        DEFAULT_IDENTITIES
+            .iter()
+            .map(|(name, key)| (name.to_string(), key.to_string()))
+            .collect()
+    }
+
+    fn params(value: Value) -> Vec<ParamSpec> {
+        parse_param_specs(&value).unwrap()
+    }
+
+    #[test]
+    fn converts_args_by_type() {
+        let env = Env::default();
+        let specs = params(json!([
+            { "name": "admin", "type": "Address" },
+            { "name": "to_muxed", "type": "MuxedAddress" },
+            { "name": "amount", "type": "i128" },
+            { "name": "ledger", "type": "u32" },
+            { "name": "label", "type": "String" },
+            { "name": "tag", "type": "Symbol" },
+        ]));
+        let args = json!(["admin", "user1", "9007199254740993", "42", "Hello", "FORGE"]);
+        let vals = build_args(&env, "demo", &specs, &args, &identities()).unwrap();
+        assert_eq!(vals.len(), 6);
+        assert_eq!(
+            val_to_json(&env, &vals.get(0).unwrap()),
+            json!("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM")
+        );
+        assert_eq!(
+            val_to_json(&env, &vals.get(1).unwrap()),
+            json!("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4")
+        );
+        assert_eq!(val_to_json(&env, &vals.get(2).unwrap()), json!(9007199254740993i64));
+        assert_eq!(val_to_json(&env, &vals.get(3).unwrap()), json!(42));
+        assert_eq!(val_to_json(&env, &vals.get(4).unwrap()), json!("Hello"));
+        assert_eq!(val_to_json(&env, &vals.get(5).unwrap()), json!("FORGE"));
+    }
+
+    #[test]
+    fn rejects_mismatched_arg_counts() {
+        let env = Env::default();
+        let specs = params(json!([{ "name": "a", "type": "u32" }]));
+        match build_args(&env, "f", &specs, &json!([1, 2]), &identities()) {
+            Err(e) => assert!(e.contains("expects 1 argument(s)"), "unexpected error: {e}"),
+            Ok(_) => panic!("expected an argument count error"),
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_types() {
+        let env = Env::default();
+        let specs = params(json!([{ "name": "a", "type": "Bytes" }]));
+        assert!(build_args(&env, "f", &specs, &json!([1]), &identities()).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_identities() {
+        let env = Env::default();
+        assert!(resolve_address(&env, &identities(), "admin").is_ok());
+        assert!(resolve_address(
+            &env,
+            &identities(),
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+        )
+        .is_ok());
+        assert!(resolve_address(&env, &identities(), "nobody").is_err());
+    }
+
+    #[test]
+    fn decodes_scvals_to_json() {
+        let env = Env::default();
+        assert_eq!(val_to_json(&env, &Val::from_void().to_val()), Value::Null);
+        assert_eq!(val_to_json(&env, &Val::from_bool(true).to_val()), json!(true));
+        assert_eq!(val_to_json(&env, &(42u32).into_val(&env)), json!(42));
+        assert_eq!(
+            val_to_json(&env, &SdkString::from_str(&env, "hello").to_val()),
+            json!("hello")
+        );
+        assert_eq!(
+            val_to_json(&env, &Symbol::new(&env, "TAG").to_val()),
+            json!("TAG")
+        );
+        assert_eq!(val_to_json(&env, &1000i128.into_val(&env)), json!(1000));
+        let vec = SdkVec::<Val>::from_slice(&env, &[10u32.into_val(&env), 20u32.into_val(&env)]);
+        assert_eq!(val_to_json(&env, &vec.to_val()), json!([10, 20]));
+    }
 }

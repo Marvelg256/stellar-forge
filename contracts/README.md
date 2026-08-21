@@ -39,7 +39,11 @@ Exported functions:
   the token (decimals must be ≤ 18)
 - `name`, `symbol`, `decimals` — token metadata
 - `balance(id)` — balance of any address (0 when unset)
-- `transfer(from, to, amount)` — authorized transfer between addresses
+- `transfer(from, to, amount)` — authorized transfer to a destination
+  address (an ordinary account G-address, or a muxed address), authorized by
+  `from`. The Stellar token interface encodes the destination as a
+  `MuxedAddress`, so the web and integration tooling wrap a plain account
+  address into a muxed address automatically.
 - `allowance`, `approve`, `transfer_from` — spender allowances
 - `burn`, `burn_from` — balance destruction
 - `mint(to, amount)` — admin-only supply creation
